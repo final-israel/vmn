@@ -10,7 +10,8 @@ _build:
 _publish:
 	@echo "Publishing"
 	cp ${PWD}/../versions/applications/ver_stamp/version.py ${PWD}/version_stamp/
-	python3 ${PWD}/setup.py sdist upload -r internal
+	python3 setup.py sdist bdist_wheel
+	twine upload ${PWD}/dist/*
 	git checkout -- ${PWD}/version_stamp/version.py
 
 major: check _major _build _publish
@@ -56,7 +57,7 @@ check-local:
 	@echo "-------------------------------------------------------------"
 	PYTHONPATH=${PWD} flake8 --version
 	PYTHONPATH=${PWD} flake8 --exclude version.py \
-	--ignore E402,E722,E123,E126,E125,E127,E128,E129 ${PWD}/version_stamp/
+	--ignore E402,E722,E123,E126,E125,E127,E128,E129,W503,W504 ${PWD}/version_stamp/
 	@echo "-------------------------------------------------------------"
 	@echo "-~      Running unit tests                                 --"
 	${PWD}/tests/run_pytest.sh
