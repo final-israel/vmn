@@ -364,7 +364,7 @@ class MercurialVersionsBackend(VersionsBackend):
 
         return None
 
-    def stamp_app_version(self, current_changesets):
+    def stamp_app_version(self, current_changesets, extra_info=False):
         dir_path = os.path.dirname(self._app_version_file)
 
         # If there is no file - create it
@@ -477,9 +477,9 @@ class MercurialVersionsBackend(VersionsBackend):
                     'in your repos_path. Please fix and rerun'.format(repo)
                 )
 
-        info = {
-            'env': dict(os.environ),
-        }
+        info = {}
+        if extra_info:
+            info['env'] = dict(os.environ)
 
         # write service version
         with open(self._app_version_file, "w+") as f:
@@ -676,7 +676,7 @@ class MercurialVersionsBackend(VersionsBackend):
         self._backend.push()
 
 
-def get_version(versions_be_ifc, current_changesets):
+def get_version(versions_be_ifc, current_changesets, extra_info=False):
     ver = versions_be_ifc.find_version(current_changesets)
     if ver is not None:
         # Good we have found an existing version matching
@@ -684,7 +684,9 @@ def get_version(versions_be_ifc, current_changesets):
         return versions_be_ifc.get_be_formatted_version(ver)
 
     # We didn't find any existing version - generate new one
-    current_version = versions_be_ifc.stamp_app_version(current_changesets)
+    current_version = versions_be_ifc.stamp_app_version(
+        current_changesets, extra_info
+    )
     formatted_main_ver = versions_be_ifc.stamp_main_system_version(
         current_version
     )
@@ -738,11 +740,13 @@ def run_with_mercurial_versions_be(**params):
                 raise RuntimeError(
                     'Main version file must be named "main_version.py"')
 
+        extra_info = params['extra_build_info']
+
         mbe = MercurialVersionsBackend(params)
         mbe.allocate_backend()
         changesets = HostState.get_current_changeset(params['repos_path'])
 
-        print(get_version(mbe, changesets), file=sys.stdout)
+        print(get_version(mbe, changesets, extra_info), file=sys.stdout)
 
         mbe.deallocate_backend()
 
@@ -798,6 +802,12 @@ def main():
              '1. {0}.{1}.{2}.{3}\n'
              '2. {0}.{1}.{2}\n'
              '3. text1{0}text2text3{1}text4text5{2}text6'
+    )
+    parser.add_argument(
+        '--extra_build_info',
+        default=False,
+        help='Whether or not to include more build information in the '
+             'version file. For instace the current environ'
     )
 
     LOGGER.error(' '.join(args))
