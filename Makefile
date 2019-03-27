@@ -7,7 +7,7 @@ build: check  _debug _build
 _build:
 	@echo "Building"
 
-_publish:
+_publish: clean
 	@echo "Publishing"
 	cp ${PWD}/../versions/applications/ver_stamp/version.py ${PWD}/version_stamp/
 	python3 setup.py sdist bdist_wheel
@@ -66,4 +66,5 @@ check-local:
 	@echo "-------------------------------------------------------------"
 
 clean:
-	echo 'Nothing to clean'
+	rm -rf ${PWD}/dist
+	rm -rf ${PWD}/build
