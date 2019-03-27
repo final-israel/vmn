@@ -104,8 +104,12 @@ class HostState(object):
         except git.exc.InvalidGitRepositoryError:
             return HostState._get_mercurial_changeset(path), 'mercurial'
 
-        hash = client.head.commit.hexsha
-        client.close()
+        try:
+            hash = client.head.commit.hexsha
+        except Exception:
+            return None
+        finally:
+            client.close()
 
         return hash, 'git'
 
@@ -121,7 +125,7 @@ class HostState(object):
                 continue
 
             changeset = HostState.get_changeset(cur_path)
-            if changeset[0] is None:
+            if changeset is None or changeset[0] is None:
                 continue
 
             changesets[repo] = {
@@ -430,12 +434,12 @@ class MercurialVersionsBackend(VersionsBackend):
                 elif len(split_ver) == 2:
                     custom_major = split_ver[0]
                     custom_minor = split_ver[0]
-            except Exception as exc:
+            except Exception:
                 pass
 
             try:
                 custom_repos = mod_ver.repos
-            except Exception as exc:
+            except Exception:
                 pass
 
         loader = importlib.machinery.SourceFileLoader(
@@ -697,7 +701,7 @@ def run_with_mercurial_versions_be(**params):
         params['repos_path'] = os.path.abspath(params['repos_path'])
 
         if (params['main_system_name'] is None and
-                params['main_version_file'] is not None):
+            params['main_version_file'] is not None):
             raise RuntimeError(
                 'Main system name was not specified but its main_version '
                 'file was specified "'
