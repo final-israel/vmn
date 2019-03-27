@@ -226,10 +226,10 @@ def _git_pull(cur_path, repo, changesets):
 
     try:
         cur_branch = client.active_branch
-    except TypeError as exc:
+    except TypeError:
         err = 'Failed to retrieve active_branch. Probably in detached ' \
               'head in {0}'.format(cur_path)
-        LOGGER.info('{0}. Will abort operation'.format(err))
+        LOGGER.exception('{0}. Will abort operation'.format(err))
 
         return {'repo': repo, 'status': 1, 'description': err}
     finally:
