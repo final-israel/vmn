@@ -161,6 +161,8 @@ external_services = {
 pip3 install version-stamp
 ```
 
+## How is that `ver_stamp` is agnostic to application language?
+It is solely application's reposibility to actualy inject the version number that is in the `version.py` file to the application's code during its build phase. 
 
 
 ## Contributing
