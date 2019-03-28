@@ -20,7 +20,7 @@ formatter = logging.Formatter(format, '%Y-%m-%d %H:%M:%S')
 
 cons_handler = logging.StreamHandler(sys.stdout)
 cons_handler.setFormatter(formatter)
-logging.DEBUG.addHandler(cons_handler)
+LOGGER.addHandler(cons_handler)
 
 
 def goto_version(repos_path, app_name, app_version, git_remote,
