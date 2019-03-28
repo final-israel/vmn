@@ -42,8 +42,7 @@ The `ver_stamp` tool will create `whatever/path/you/like/version.py` inside the 
 
 **Illustration:**
 
-![](/home/pavelr/Desktop/ver_stamp.jpg)
-
+![ver_stamp](https://user-images.githubusercontent.com/5350434/55154276-09d0d480-515d-11e9-8add-f2cb42da3666.jpg)
 
 
 A typical contents of the `version.py` file would be:
