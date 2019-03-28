@@ -31,7 +31,7 @@ In order to stamp `my_app` you need to decide which back end you would like to u
 * Clone it to your build machine under `/path/to/your_repos/versions`
 * Run the following command:
 
-```shell
+```sh
 ver_stamp --repos_path /path/to/your_repos/ \
 --app_version_file /path/to/your_repos/versions/whatever/path/you/like/version.py \
 --release_mode patch \
@@ -70,7 +70,7 @@ This utility is made for going back to a specific version. Let's say that you've
 
 
 
-```shell
+```sh
 goto_version --repos_path /path/to/your_repos/ --app_name my_app --app_version 2.0.3.4
 --git_remote https://github.com/myname/
 ```
@@ -79,7 +79,7 @@ goto_version --repos_path /path/to/your_repos/ --app_name my_app --app_version 2
 
 Now if you'd like to go back to the latest commits just run `goto_version`:
 
-```shell
+```sh
 goto_version --repos_path /path/to/your_repos/
 ```
 
@@ -89,7 +89,7 @@ goto_version --repos_path /path/to/your_repos/
 
 A Very simple tool for printing the latest version of any app to stdout. 
 
-```shell
+```sh
 get_version --repos_path /path/to/your_repos/ --app_name my_app
 ```
 
@@ -115,7 +115,7 @@ Let's assume that we have an application that consists of `service_a` and `servi
 
 Run:
 
-```shell
+```sh
 ver_stamp --repos_path /path/to/your_repos \
 --app_version_file /path/to/your_repos/versions/apps/my_system/service_a/version.py \
 --app_name service_a \
@@ -158,7 +158,7 @@ external_services = {
 
 ## Installation
 
-```shell
+```sh
 pip3 install version-stamp
 ```
 
