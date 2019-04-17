@@ -21,14 +21,19 @@ An additional `redis` back end is planned to be developed based on requirements.
 
 ## Usage
 
+<u>First thing first</u>
+
+- Init a new repository called `versions` (Depends on the back-end type; `git` or `mercurial`)
+- Clone it to your build machine under `/path/to/your_repos/versions`
+
+
+
 ### ver_stamp
 
 Let's say that your application's code is stored in a `git` repository called `my_app` and this repository's path is `/path/to/your_repos/my_app`
 
 In order to stamp `my_app` you need to decide which back end you would like to use. Let's say that you've decided to go with the `git` back end.  Perform the following steps:
 
-* Init a new repository called `versions` 
-* Clone it to your build machine under `/path/to/your_repos/versions`
 * Run the following command:
 
 ```sh
