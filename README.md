@@ -45,6 +45,8 @@ ver_stamp --repos_path /path/to/your_repos/ \
 
 The `ver_stamp` tool will create `whatever/path/you/like/version.py` inside the `versions` repository and make the necessary commits and push the whole thing. 
 
+`--release_mode` supports `micro`, `patch`, `minor` and `major`
+
 **Illustration:**
 
 ![ver_stamp](https://user-images.githubusercontent.com/5350434/55154276-09d0d480-515d-11e9-8add-f2cb42da3666.jpg)
