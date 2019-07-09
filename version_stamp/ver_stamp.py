@@ -264,7 +264,10 @@ class MercurialVersionsBackend(VersionsBackend):
 
         # Find the first tag with app_name and its version file path
         for tag in tags:
-            if not tag[0].decode().startswith(self._app_name):
+            # Find the last occurance of _ on the tag and extract an app name from it
+            tmp = tag[0].decode()
+            tmp = tmp[:tmp.rfind('_')]
+            if not tmp == self._app_name:
                 continue
 
             for path in self._backend.status(change=tag[0]):
