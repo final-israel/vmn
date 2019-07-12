@@ -7,15 +7,16 @@ A simple package for auto increasing version numbers of any application agnostic
 * `get_version`
 
 
+`ver_stamp` is fully compliant with https://semver.org semantics
 
 ## Design
 
-The main tool in this package is the `ver_stamp` tool. It is responsible of maintaining version numbers of different applications in an organization.  Before we'll get into its usage, it's important to understand how it operates. The `ver_stamp` tool uses a  back end to save the version information of all of the applications it maintains. The supported back ends are:
+The main tool in this package is the `ver_stamp` tool. It is responsible of maintaining version numbers of different applications in an organization.  Before we'll get into its usage, it's important to understand how it operates. The `ver_stamp` tool uses a  backend to save the version information of all of the applications it maintains. The supported back ends are:
 
 *  `git` [WIP]
 * `mercurial` - Fully supported
 
-An additional `redis` back end is planned to be developed based on requirements.
+An additional `redis` backend is planned to be developed based on requirements.
 
 
 
@@ -32,7 +33,7 @@ An additional `redis` back end is planned to be developed based on requirements.
 
 Let's say that your application's code is stored in a `git` repository called `my_app` and this repository's path is `/path/to/your_repos/my_app`
 
-In order to stamp `my_app` you need to decide which back end you would like to use. Let's say that you've decided to go with the `git` back end.  Perform the following steps:
+In order to stamp `my_app` you need to decide which backend you would like to use. Let's say that you've decided to go with the `git` back end.  Perform the following steps:
 
 * Run the following command:
 
