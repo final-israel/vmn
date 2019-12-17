@@ -231,7 +231,10 @@ class MercurialVersionsBackend(VersionsBackend):
     def __init__(self, conf=None):
         VersionsBackend.__init__(self, conf)
 
-        self._versions_repo_path = os.path.join(self._repos_path, 'versions')
+        self._versions_repo_path = os.getenv('VER_STAMP_VERSIONS_PATH', None)
+
+        if self._versions_repo_path is None:
+            self._versions_repo_path = os.path.join(self._repos_path, 'versions')
 
         self._app_version_file = None
         if 'app_version_file' in conf:
@@ -700,7 +703,11 @@ def get_version(versions_be_ifc, current_changesets, extra_info=False):
 
 
 def run_with_mercurial_versions_be(**params):
-    lock = LockFile(os.path.join(params['repos_path'], 'versions', 'ver.lock'))
+    versions_repo_path = os.getenv('VER_STAMP_VERSIONS_PATH', None)
+    if versions_repo_path is None:
+        versions_repo_path = os.path.join(params['repos_path'], 'versions')
+
+    lock = LockFile(os.path.join(versions_repo_path, 'ver.lock'))
     with lock:
         LOGGER.error('Locked: {0}'.format(lock.path))
 
@@ -721,7 +728,7 @@ def run_with_mercurial_versions_be(**params):
         params['app_version_file'] = os.path.abspath(
             params['app_version_file']
         )
-        if not params['app_version_file'].startswith(params['repos_path']):
+        if not params['app_version_file'].startswith(versions_repo_path):
             raise RuntimeError(
                 'App version file must be within versions repository'
             )
@@ -734,7 +741,7 @@ def run_with_mercurial_versions_be(**params):
             params['main_version_file'] = \
                 os.path.abspath(params['main_version_file'])
             main_version_file = params['main_version_file']
-            if not main_version_file.startswith(params['repos_path']):
+            if not main_version_file.startswith(versions_repo_path):
                 raise RuntimeError(
                     'Main app version file must be within versions repository'
                 )
