@@ -66,7 +66,7 @@ def test_wrong_parameters(mercurial_app_layout):
             repos_path='{0}/'.format(
                 mercurial_app_layout.base_versions_dir_path
             ),
-            app_version_file='{0}/a/dir/wrong_name.py'.format(
+            app_version_file='{0}/versions/a/dir/wrong_name.py'.format(
                 mercurial_app_layout.base_versions_dir_path
             ),
             release_mode='debug',
@@ -84,7 +84,7 @@ def test_wrong_parameters(mercurial_app_layout):
             repos_path='{0}/'.format(
                 mercurial_app_layout.base_versions_dir_path
             ),
-            app_version_file='{0}/a/dir/version.py'.format(
+            app_version_file='{0}/versions/a/dir/version.py'.format(
                 mercurial_app_layout.base_versions_dir_path
             ),
             release_mode='debug',
@@ -103,12 +103,12 @@ def test_wrong_parameters(mercurial_app_layout):
             repos_path='{0}/'.format(
                 mercurial_app_layout.base_versions_dir_path
             ),
-            app_version_file='{0}/a/dir/version.py'.format(
+            app_version_file='{0}/versions/a/dir/version.py'.format(
                 mercurial_app_layout.base_versions_dir_path
             ),
             release_mode='debug',
             app_name='xxx',
-            main_version_file='{0}/a/dir/wrong_name.py'.format(
+            main_version_file='{0}/versions/a/dir/wrong_name.py'.format(
                 mercurial_app_layout.base_versions_dir_path
             ),
             main_system_name='MainName',
