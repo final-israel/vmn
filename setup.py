@@ -22,7 +22,9 @@ setuptools.setup(
         'console_scripts': ['ver-stamp = version_stamp.ver_stamp:main',
                             'ver_stamp = version_stamp.ver_stamp:main',
                             'version_manager = version_stamp.ver_stamp:main',
+                            'get-version = version_stamp.get_version:main',
                             'get_version = version_stamp.get_version:main',
+                            'goto-version = version_stamp.goto_version:main',
                             'goto_version = version_stamp.goto_version:main']
     },
 )
