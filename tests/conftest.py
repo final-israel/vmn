@@ -26,7 +26,7 @@ class MercurialAppLayoutFixture(object):
     def __init__(self, versions, remote_versions):
         self.versions_root_path = versions.strpath
         self.remote_versions_root_path = remote_versions.strpath
-        self.base_versions_dir_path = versions.dirname
+        self.versions_base_dir = versions.dirname
 
         client = hglib.init(
             dest=self.remote_versions_root_path
@@ -47,7 +47,7 @@ class MercurialAppLayoutFixture(object):
             shutil.rmtree(val['path'])
 
     def create_repo(self, repo_name, repo_type):
-        path = os.path.join(self.base_versions_dir_path, repo_name)
+        path = os.path.join(self.versions_base_dir, repo_name)
 
         if repo_type == 'mercurial':
             client = hglib.init(dest=path)
@@ -160,14 +160,14 @@ class MercurialAppLayoutFixture(object):
         client.push()
         client.close()
 
-    def create_mercurial_backend_params(self,
+    def get_mercurial_be_params(self,
                                  app_name,
                                  release_mode='debug',
                                  starting_version='0.0.0.0',
                                  main_system_name=None,
                                  version_template='{0}.{1}.{2}'):
         params = {
-            'repos_path': self.base_versions_dir_path,
+            'repos_path': self.versions_base_dir,
             'release_mode': release_mode,
             'app_name': app_name,
             'starting_version': starting_version,
@@ -200,7 +200,7 @@ def session_uuid():
 
 
 @pytest.fixture(scope='function')
-def mercurial_app_layout(tmpdir):
+def app_layout(tmpdir):
     versions = tmpdir.mkdir('versions')
     remote_versions = tmpdir.mkdir('remote_versions')
     app_layout = MercurialAppLayoutFixture(versions, remote_versions)

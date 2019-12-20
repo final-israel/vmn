@@ -807,7 +807,7 @@ def get_version(versions_be_ifc, current_changesets, extra_info=False):
     return versions_be_ifc.get_be_formatted_version(current_version)
 
 
-def run_with_mercurial_versions_be(**params):
+def run_with_mercurial_be(**params):
     versions_repo_path = os.getenv('VER_STAMP_VERSIONS_PATH', None)
     if versions_repo_path is None:
         versions_repo_path = os.path.join(params['repos_path'], 'versions')
@@ -931,7 +931,7 @@ def main():
     args = parser.parse_args(args)
     params = copy.deepcopy(vars(args))
 
-    return run_with_mercurial_versions_be(**params)
+    return run_with_mercurial_be(**params)
 
 
 if __name__ == '__main__':
