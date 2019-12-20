@@ -58,13 +58,11 @@ OUT_PATH=${base_log_dir}
 
 echo "Will run:"
 echo "pytest -vv ${COLOR} ${SPECIFIC_TEST} \
---junit-xml=${OUT_PATH}/docker_registry_system_tests_results.xml \
-${module_name} | tee ${OUT_PATH}/docker_registry_system_tests_output.log"
+${module_name} | tee ${OUT_PATH}/tests_output.log"
 
 PYTHONPATH=${CUR_DIR}:${CUR_DIR}../ \
 pytest -vv ${COLOR} ${SPECIFIC_TEST} \
---junit-xml=${OUT_PATH}/docker_registry_system_tests_results.xml \
-${module_name} | tee ${OUT_PATH}/docker_registry_system_tests_output.log
+${module_name} | tee ${OUT_PATH}/tests_output.log
 
 RET_CODE=$?
 

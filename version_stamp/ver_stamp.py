@@ -234,7 +234,8 @@ class MercurialVersionsBackend(VersionsBackend):
         self._versions_repo_path = os.getenv('VER_STAMP_VERSIONS_PATH', None)
 
         if self._versions_repo_path is None:
-            self._versions_repo_path = os.path.join(self._repos_path, 'versions')
+            self._versions_repo_path = os.path.join(self._repos_path,
+                                                    'versions')
 
         self._app_version_file = None
         if 'app_version_file' in conf:
@@ -398,7 +399,8 @@ class MercurialVersionsBackend(VersionsBackend):
                         new_changesets[tag][k] = v
                         continue
 
-                    new_changesets[tag][k] = {'hash': v, 'vcs_type': 'mercurial'}
+                    new_changesets[tag][k] = {'hash': v,
+                                              'vcs_type': 'mercurial'}
 
             self._write_new_app_hist_version_file(
                 changesets=new_changesets,
@@ -438,9 +440,8 @@ class MercurialVersionsBackend(VersionsBackend):
             f.write('\n')
 
         commit_msg = \
-            '{0}: port _version_history file from a deprecated format to the new one'.format(
-                self._app_name
-            )
+            '{0}: port _version_history file from a deprecated format to ' \
+            'the new one'.format(self._app_name)
 
         self._backend.add(path.encode())
         self._backend.commit(
@@ -466,9 +467,8 @@ class MercurialVersionsBackend(VersionsBackend):
             f.write('\n')
 
         commit_msg = \
-            '{0}: port version file from a deprecated format to the new one'.format(
-                self._app_name
-            )
+            '{0}: port version file from a deprecated format to the new ' \
+            'one'.format(self._app_name)
 
         self._backend.add(self._app_version_file.encode())
         self._backend.commit(
@@ -483,9 +483,9 @@ class MercurialVersionsBackend(VersionsBackend):
             f.write('name = "{0}"\n'.format(self._app_name))
             f.write('version = "{0}"\n'.format(
                 VersionsBackend.get_formatted_version(
-                version,
-                self._version_template,
-                self._version_template_octats_count
+                    version,
+                    self._version_template,
+                    self._version_template_octats_count
                 )
             ))
 
@@ -819,14 +819,14 @@ def run_with_mercurial_versions_be(**params):
         params['repos_path'] = os.path.abspath(params['repos_path'])
 
         if (params['main_system_name'] is None and
-            params['main_version_file'] is not None):
+                params['main_version_file'] is not None):
             raise RuntimeError(
                 'Main system name was not specified but its main_version '
                 'file was specified "'
             )
 
         if (params['main_system_name'] is not None and
-            params['main_version_file'] is None):
+                params['main_version_file'] is None):
             raise RuntimeError('Main system name was specified but main '
                                'version file path was not')
 
