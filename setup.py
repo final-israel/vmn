@@ -19,7 +19,9 @@ setuptools.setup(
     package_dir={'version_stamp': 'version_stamp'},
     packages=['version_stamp',],
     entry_points={
-        'console_scripts': ['ver_stamp = version_stamp.ver_stamp:main',
+        'console_scripts': ['ver-stamp = version_stamp.ver_stamp:main',
+                            'ver_stamp = version_stamp.ver_stamp:main',
+                            'version_manager = version_stamp.ver_stamp:main',
                             'get_version = version_stamp.get_version:main',
                             'goto_version = version_stamp.goto_version:main']
     },
