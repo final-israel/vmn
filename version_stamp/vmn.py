@@ -169,12 +169,12 @@ class IVersionsStamper(object):
     @staticmethod
     def parse_template(template):
         placeholders = (
-            '{0}', '{1}', '{2}', '{NON_EXISTING_PLACEHOLDER}'
+            '{0}', '{1}', '{2}', '{3}', '{4}', '{NON_EXISTING_PLACEHOLDER}'
         )
-        templates = [None, None, None]
+        templates = [None, None, None, None, None]
 
-        if len(template) > 30:
-            raise RuntimeError('Template too long: max 30 chars')
+        if len(template) > 50:
+            raise RuntimeError('Template too long: max 50 chars')
 
         pos = template.find(placeholders[0])
         if pos < 0:
@@ -1232,7 +1232,7 @@ def build_world(name, working_dir, root=False):
             }
         }
     }
-    params['version_template'] = '{0}.{1}.{2}'
+    params['version_template'] = '{0}.{1}.{2}_{3}-${4}'
     params["extra_info"] = False
     # TODO: handle redundant parse template here
     IVersionsStamper.parse_template(params['version_template'])
@@ -1253,7 +1253,12 @@ def build_world(name, working_dir, root=False):
 
     with open(app_conf_path, 'r') as f:
         data = yaml.safe_load(f)
-        params['version_template'] = data["conf"]["template"]
+        ver_template = data["conf"]["template"]
+        ver_template = '{0}_{1}'.format(
+            ver_template,
+            data["conf"]["rc_template"]
+        )
+        params['version_template'] = ver_template
         params["extra_info"] = data["conf"]["extra_info"]
         params['raw_configured_deps'] = data["conf"]["deps"]
 

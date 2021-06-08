@@ -374,6 +374,34 @@ def test_version_template(app_layout):
     formated_version = vcs.get_formatted_version('2.0.9')
     assert formated_version == 'ap2xxXX0AC@9C'
 
+    app_layout.write_file_commit_and_push(
+        'test_repo', 'f1.file', 'msg1'
+    )
+    params['release_mode'] = 'minor'
+    params['mode'] = 'dev'
+    vcs = vmn.VersionControlStamper(params)
+    template = 'ap{0}.{1}.@{2}'
+    vcs._version_template, vcs._version_template_octats_count = \
+        vmn.IVersionsStamper.parse_template(template)
+    vmn.stamp(vcs, params)
+    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
+    data = ver_info['stamping']['app']
+    assert data['version'] == 'ap1.4.@0_dev-1'
+    app_layout.write_file_commit_and_push(
+        'test_repo', 'f1.file', 'msg2'
+    )
+    params['release_mode'] = 'minor'
+    params['mode'] = 'release'
+    vmn.stamp(vcs, params)
+    assert data['version'] == 'ap1.4.@0'
+
+
+    template = 'ap{0}xx{0}XX{1}AC@{0}{2}ABC{rc}AA{rcver}C'
+    vcs._version_template, vcs._version_template_octats_count = \
+        vmn.IVersionsStamper.parse_template(template)
+    formated_version = vcs.get_formatted_version('2.0.9_alpha-3')
+    assert formated_version == 'ap2xxXX0AC@9ABCalphaAA3C'
+
 
 def test_basic_goto(app_layout):
     params = copy.deepcopy(app_layout.params)
