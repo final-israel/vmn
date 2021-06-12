@@ -752,7 +752,10 @@ class VersionControlStamper(IVersionsStamper):
             '{0}: update to version {1}'.format(
                 self._name, app_version
             )
-        msg = yaml.dump(self._version_info_message, sort_keys=True)
+        msg = '{0}: Stamped version {1}\n\n'.format(
+            self._name,
+            app_version
+        ) + yaml.dump(self._version_info_message, sort_keys=True)
         self._backend.commit(
             message=msg,
             user='vmn',
@@ -1006,6 +1009,11 @@ def stamp(versions_be_ifc, params, pull=False, init_only=False):
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.info('vmn tracking is not yet initialized')
         del be
+        return err
+
+    err = be.check_for_git_user_config()
+    if err:
+        LOGGER.info('{0}. Exiting'.format(err))
         return err
 
     err = be.check_for_pending_changes()

@@ -6,6 +6,8 @@ import logging
 from pathlib import Path
 import re
 import time
+from packaging import version as pversion
+import configparser
 
 INIT_COMMIT_MESSAGE = 'Initialized vmn tracking'
 
@@ -273,6 +275,16 @@ class GitBackend(VersionControlBackend):
     def in_detached_head(self):
         return self._be.head.is_detached
 
+    def check_for_git_user_config(self):
+        try:
+            self._be.config_reader().get_value('user', 'name')
+            self._be.config_reader().get_value('user', 'email')
+
+            return None
+        except (configparser.NoSectionError, configparser.NoOptionError):
+            return "git user name or email configuration is missing, " \
+                   "can't commit"
+
     def check_for_pending_changes(self):
         if self._be.is_dirty():
             err = 'Pending changes in {0}.'.format(self.root())
@@ -419,6 +431,73 @@ class GitBackend(VersionControlBackend):
             LOGGER.exception(
                 'Failed to fetch tags'
             )
+
+    def get_vmn_version_info(
+            self,
+            tag_name=None,
+            app_name=None,
+            root_app_name=None
+    ):
+        if tag_name is None and app_name is None and root_app_name is None:
+            return None
+
+        commit_tag_obj = None
+        if tag_name is not None:
+            try:
+                commit_tag_obj = self._be.commit(tag_name)
+            except:
+                return None
+        elif app_name is not None or root_app_name is not None:
+            used_app_name = app_name
+            root = False
+            if root_app_name is not None:
+                used_app_name = root_app_name
+                root = True
+
+            max_version = None
+            formated_tag_name = VersionControlBackend.get_tag_name(
+                used_app_name
+            )
+            for tag in self.tags(filter='{}_*'.format(formated_tag_name)):
+                _app_name, version = VersionControlBackend.get_tag_properties(
+                    tag, root=root
+                )
+                if version is None:
+                    continue
+
+                if _app_name != used_app_name:
+                    continue
+
+                _commit_tag_obj = self._be.commit(tag)
+                if _commit_tag_obj.author.name != VMN_USER_NAME:
+                    continue
+
+                if max_version is None:
+                    max_version = version
+                    tag_name = tag
+                    commit_tag_obj = _commit_tag_obj
+                elif pversion.parse(max_version) < pversion.parse(version):
+                    max_version = version
+                    tag_name = tag
+                    commit_tag_obj = _commit_tag_obj
+
+        if commit_tag_obj is None:
+            return None
+
+        if commit_tag_obj.author.name != VMN_USER_NAME:
+            return None
+
+        # TODO:: Check API commit version
+
+        # safe_load discards any text before the YAML document (if present)
+        commit_msg = yaml.safe_load(
+            self._be.commit(tag_name).message
+        )
+
+        if commit_msg is None or 'stamping' not in commit_msg:
+            return None
+
+        return commit_msg
 
     @staticmethod
     def clone(path, remote):
