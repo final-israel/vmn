@@ -8,7 +8,28 @@ import re
 import time
 
 INIT_COMMIT_MESSAGE = 'Initialized vmn tracking'
-MOVING_COMMIT_PREFIX = '_-'
+
+SEMVER_REGEX = \
+    '^(?P<major>0|[1-9]\d*)\.' \
+    '(?P<minor>0|[1-9]\d*)\.' \
+    '(?P<patch>0|[1-9]\d*)' \
+    '(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?' \
+    '(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
+VMN_REGEX = \
+    '^(?P<major>0|[1-9]\d*)\.' \
+    '(?P<minor>0|[1-9]\d*)\.' \
+    '(?P<patch>0|[1-9]\d*)' \
+    '(?:\D(?P<hotfix>0|[1-9]\d*))?' \
+    '(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?' \
+    '(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
+VMN_TAG_REGEX = \
+    '^(?P<app_name>.+)_(?P<major>0|[1-9]\d*)\.' \
+    '(?P<minor>0|[1-9]\d*)\.' \
+    '(?P<patch>0|[1-9]\d*)' \
+    '(?:\D(?P<hotfix>0|[1-9]\d*))?' \
+    '(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?' \
+    '(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
+
 VMN_USER_NAME = 'vmn'
 LOGGER = None
 
@@ -105,34 +126,41 @@ class VersionControlBackend(object):
 
     @staticmethod
     def get_tag_properties(tag_name, root=False):
-        try:
-            if not root:
-                groups = re.search(
-                    r'(.+)_(\d+\.\d+\.\d+)_?(.+-\d+)*$',
-                    tag_name
-                ).groups()
-
-                if len(groups) != 3:
-                    return None, None, None
-
-                mode_version = groups[2]
-            else:
+        if root:
+            try:
                 groups = re.search(
                     r'(.+)_(\d+)$',
                     tag_name
                 ).groups()
 
-                mode_version = None
-
                 if len(groups) != 2:
-                    return None, None, None
-        except:
-            return None, None, None
+                    return None, None, None, None, None
+            except:
+                return None, None, None, None, None
 
-        app_name = groups[0].replace('-', '/')
-        version = groups[1]
+            app_name = groups[0].replace('-', '/')
+            version = groups[1]
 
-        return app_name, version, mode_version
+            return app_name, version, None, None, None
+
+        match = re.search(
+            VMN_TAG_REGEX,
+            tag_name
+        )
+
+        if match is None:
+            return None, None, None, None, None
+
+        gdict = match.groupdict()
+        gdict['semver_version'] = f'{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}'
+
+        gdict['app_name'] = gdict['app_name'].replace('-', '/')
+
+        return gdict['app_name'], \
+               gdict['semver_version'], \
+               gdict['hotfix'], \
+               gdict['prerelease'], \
+               gdict['buildmetadata']
 
 
 class GitBackend(VersionControlBackend):

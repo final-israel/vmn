@@ -34,6 +34,8 @@ class IVersionsStamper(object):
         self._app_conf_path = conf['app_conf_path']
         self._starting_version = conf['starting_version']
         self._mode = conf['mode']
+        self._mode_suffix = conf['mode_suffix']
+        self._buildmetadata = conf['buildmetadata']
         self._repo_name = '.'
 
         self._root_app_name = conf['root_app_name']
@@ -43,14 +45,24 @@ class IVersionsStamper(object):
         self._version_file_path = '{}/{}'.format(
             self._app_dir_path, VER_FILE_NAME)
 
-        self._version_template, self._version_template_octats_count = \
-            IVersionsStamper.parse_template(conf['version_template'])
+        self._version_template, \
+        self._semver_template, \
+        self._hotfix_template, \
+        self._prerelease_template, \
+        self._buildmetadata_template = IVersionsStamper.parse_template(
+            conf['semver_template'],
+            conf['hotfix_template'],
+            conf['prerelease_template'],
+            conf['buildmetadata_template']
+        )
 
         self._raw_configured_deps = conf['raw_configured_deps']
         self.actual_deps_state = conf["actual_deps_state"]
         self._flat_configured_deps = self.get_deps_changesets()
         self._mode_count = {}
         self._current_mode = 'release'
+        self._current_mode_suffix = ''
+        self._hide_zero_hotfix = True
 
         self.ver_info_form_repo = \
             self.get_vmn_version_info(
@@ -60,6 +72,7 @@ class IVersionsStamper(object):
         if self.tracked:
             self._mode_count = self.ver_info_form_repo['stamping']['app']["mode_count"]
             self._current_mode = self.ver_info_form_repo['stamping']['app']["orig_current_mode"]
+            self._current_mode_suffix = self.ver_info_form_repo['stamping']['app']["orig_current_mode_suffix"]
 
         if self._current_mode == 'release' and self._release_mode is None:
             del self._backend
@@ -91,6 +104,7 @@ class IVersionsStamper(object):
                     'release_mode': self._release_mode,
                     "previous_version": '0.0.0',
                     'current_mode': 'release',
+                    'current_mode_suffix': '',
                     'mode_count': {},
                     "info": {},
                 },
@@ -115,113 +129,223 @@ class IVersionsStamper(object):
         del self._backend
 
     def gen_app_version(self, current_version):
-        major, minor, suffix = current_version.split('.')
-        patch = suffix
+        match = re.search(
+            stamp_utils.VMN_REGEX,
+            current_version
+        )
+
+        gdict = match.groupdict()
+        major = gdict['major']
+        minor = gdict['minor']
+        patch = gdict['patch']
+        hotfix = gdict['hotfix']
         mode = self._mode
         mode_count = self._mode_count
+        mode_suffix = self._mode_suffix
 
         # If user did not specify a change in mode,
         # stay with the previous one
         if mode is None:
             mode = self._current_mode
+            mode_suffix = self._current_mode_suffix
+
+        counter_key = mode + mode_suffix
 
         if self._current_mode != 'release' and self._release_mode is None:
-            patch, cur_rc = suffix.split('_')
-
-            if mode not in mode_count:
-                mode_count[mode] = 0
-            mode_count[mode] += 1
+            if counter_key not in mode_count:
+                mode_count[counter_key] = 0
+            mode_count[counter_key] += 1
 
             self._version_info_message['stamping']['app']['mode_count'] = mode_count
             self._version_info_message['stamping']['app']['current_mode'] = mode
+            self._version_info_message['stamping']['app']['current_mode_suffix'] = mode_suffix
         elif self._current_mode != 'release' and self._release_mode is not None and mode != 'release':
-            patch, _ = suffix.split('_')
             mode_count = {
-                mode: 1
+                counter_key: 1
             }
 
             self._version_info_message['stamping']['app']['mode_count'] = mode_count
             self._version_info_message['stamping']['app']['current_mode'] = mode
+            self._version_info_message['stamping']['app']['current_mode_suffix'] = mode_suffix
         elif self._current_mode == 'release' and mode != 'release':
             mode_count = {
-                mode: 1
+                counter_key: 1
             }
 
             self._version_info_message['stamping']['app']['mode_count'] = mode_count
             self._version_info_message['stamping']['app']['current_mode'] = mode
+            self._version_info_message['stamping']['app']['current_mode_suffix'] = mode_suffix
 
         if self._release_mode == 'major':
             major = str(int(major) + 1)
             minor = str(0)
             patch = str(0)
+            hotfix = str(0)
         elif self._release_mode == 'minor':
             minor = str(int(minor) + 1)
             patch = str(0)
+            hotfix = str(0)
         elif self._release_mode == 'patch':
             patch = str(int(patch) + 1)
+            hotfix = str(0)
+        elif self._release_mode == 'hotfix':
+            hotfix = str(int(hotfix) + 1)
 
-        verstr = '{0}.{1}.{2}'.format(major, minor, patch)
-        if mode != 'release':
-            verstr = '{0}_{1}-{2}'.format(verstr, mode, mode_count[mode])
+        # TODO: ugly
+        copy_mode_count = copy.deepcopy(mode_count)
+        copy_mode_count['release'] = 0
+        verstr = self.gen_vmn_version(major, minor, patch,
+                                      gdict['hotfix'],
+                                      mode + str(copy_mode_count[counter_key]) + mode_suffix,
+                                      self._buildmetadata)
 
         return verstr
 
     @staticmethod
-    def parse_template(template):
+    def parse_template(semver_template, hotfix_template, prerelease_template, buildmetadata_template):
         placeholders = (
-            '{0}', '{1}', '{2}', '{3}', '{4}', '{NON_EXISTING_PLACEHOLDER}'
+            '{major}', '{minor}', '{patch}', '{hotfix}',
+            '{prerelease}', '{buildmetadata}'
         )
-        templates = [None, None, None, None, None]
 
-        if len(template) > 50:
-            raise RuntimeError('Template too long: max 50 chars')
+        # TODO: refactor here
+        tmp_formats = set(re.findall(r'({.+?})', semver_template))
+        semver_formats = set(placeholders[:3])
+        try:
+            assert len(tmp_formats) == 3
+            assert len(tmp_formats & semver_formats) == 3
+        except:
+            raise RuntimeError(
+                'Invalid semver_template must include all'
+                '{major}{minor}{patch} formats and only them'
+            )
 
-        pos = template.find(placeholders[0])
-        if pos < 0:
-            raise RuntimeError('Invalid template must include {0} at least')
+        tmp_formats = set(re.findall('({.+?})', hotfix_template))
+        hotfix_formats = set(placeholders[3:4])
+        try:
+            assert len(tmp_formats) == 1
+            assert len(tmp_formats & hotfix_formats) == 1
+        except:
+            raise RuntimeError(
+                'Invalid hotfix_template must include '
+                '{hotfix} format and only it'
+            )
 
-        prefix = template[:pos]
-        for placeholder in placeholders:
-            prefix = prefix.replace(placeholder, '')
+        tmp_formats = set(re.findall('({.+?})', prerelease_template))
+        prerelease_formats = set(placeholders[4:5])
+        try:
+            assert len(tmp_formats) == 1
+            assert len(tmp_formats & prerelease_formats) == 1
+        except:
+            raise RuntimeError(
+                'Invalid prerelease_template must include '
+                '{prerelease} format and only it'
+            )
 
-        for i in range(len(placeholders) - 1):
-            cur_pos = template.find(placeholders[i])
-            next_pos = template.find(placeholders[i + 1])
-            if next_pos < 0:
-                next_pos = None
+        tmp_formats = set(re.findall('({.+?})', buildmetadata_template))
+        buildmetadata_formats = set(placeholders[5:6])
+        try:
+            assert len(tmp_formats) == 1
+            assert len(tmp_formats & buildmetadata_formats) == 1
+        except:
+            raise RuntimeError(
+                'Invalid buildmetadata_template must include '
+                '{hbuildmetadata} format and only it'
+            )
 
-            tmp = template[cur_pos:next_pos]
+        def shorten_template(template, placeholders):
+            templates = []
+            placeholders = list(placeholders) + ['{NON_EXISTING_PLACEHOLDER}']
+            pos = template.find(placeholders[0])
+            prefix = template[:pos]
             for placeholder in placeholders:
-                tmp = tmp.replace(placeholder, '')
+                prefix = prefix.replace(placeholder, '')
 
-            tmp = '{0}{1}'.format(placeholders[i], tmp)
+            for i in range(len(placeholders) - 1):
+                cur_pos = template.find(placeholders[i])
+                next_pos = template.find(placeholders[i + 1])
+                if next_pos < 0:
+                    next_pos = None
 
-            templates[i] = tmp
+                tmp = template[cur_pos:next_pos]
+                for placeholder in placeholders:
+                    tmp = tmp.replace(placeholder, '')
 
-            if next_pos is None:
-                break
+                tmp = '{0}{1}'.format(placeholders[i], tmp)
 
-        ver_format = ''
-        octats_count = 0
-        templates[0] = '{0}{1}'.format(prefix, templates[0])
-        for t in templates:
-            if t is None:
-                break
+                templates.append(tmp)
 
-            ver_format += t
-            octats_count += 1
+                if next_pos is None:
+                    break
 
-        return ver_format, octats_count
+            ver_format = ''
+            templates[0] = '{0}{1}'.format(prefix, templates[0])
+            for t in templates:
+                ver_format += t
 
-    def get_formatted_version(self, version):
-        octats = version.split('.')
-        if len(octats) > 3:
-            raise RuntimeError('Version is too long. Maximum is 3 octats')
+            return ver_format
 
-        for i in range(3 - len(octats)):
-            octats.append('0')
+        semver_template = shorten_template(semver_template, placeholders[:3])
+        hotfix_template = shorten_template(hotfix_template, placeholders[3:4])
+        prerelease_template = shorten_template(prerelease_template, placeholders[4:5])
+        buildmetadata_template = shorten_template(buildmetadata_template, placeholders[5:6])
 
-        return self._version_template.format(*(octats[:self._version_template_octats_count]))
+        template = semver_template + \
+                   hotfix_template + \
+                   prerelease_template + \
+                   buildmetadata_template
+
+        if len(template) > 300:
+            raise RuntimeError('Template too long: max 300 chars')
+
+        return template, semver_template, hotfix_template, prerelease_template, buildmetadata_template
+
+    def gen_vmn_version(self, major, minor, patch, hotfix=None, prerelease=None, buildmetadata=None):
+        if self._hide_zero_hotfix and hotfix == '0':
+            hotfix = None
+
+        if prerelease.startswith('release'):
+            prerelease = None
+
+        vmn_version = f'{major}.{minor}.{patch}'
+        if hotfix is not None:
+            vmn_version = f'{vmn_version}_{hotfix}'
+        if prerelease is not None:
+            vmn_version = f'{vmn_version}-{prerelease}'
+        if buildmetadata is not None:
+            vmn_version = f'{vmn_version}+{buildmetadata}'
+
+        return vmn_version
+
+    def get_formatted_version(self, raw_vmn_version):
+        match = re.search(
+            stamp_utils.VMN_REGEX,
+            raw_vmn_version
+        )
+
+        gdict = match.groupdict()
+        if self._hide_zero_hotfix and gdict['hotfix'] == '0':
+            gdict['hotfix'] = None
+
+        formatted_version = self._semver_template.format(
+            major=gdict['major'],
+            minor=gdict['minor'],
+            patch=gdict['patch']
+        )
+        if gdict['hotfix'] is not None:
+            formatted_version += self._hotfix_template.format(
+                hotfix=gdict['hotfix']
+            )
+        if gdict['prerelease'] is not None:
+            formatted_version += self._prerelease_template.format(
+                prerelease=gdict['prerelease']
+            )
+        if gdict['buildmetadata'] is not None:
+            formatted_version += self._buildmetadata_template.format(
+                buildmetadata=gdict['buildmetadata']
+            )
+
+        return formatted_version
 
     def get_vmn_version_info(
             self,
@@ -253,9 +377,8 @@ class IVersionsStamper(object):
             tags = self._backend.tags(filter='{}_*'.format(formated_tag_name))
 
             for tag in tags:
-                _app_name, version, mode_version = stamp_utils.VersionControlBackend.get_tag_properties(
-                    tag, root=root
-                )
+                _app_name, version, hotfix, prerelease, buildmetadata = \
+                    stamp_utils.VersionControlBackend.get_tag_properties(tag, root=root)
                 if version is None:
                     continue
 
@@ -293,6 +416,8 @@ class IVersionsStamper(object):
 
         commit_msg['stamping']['app']['orig_current_mode'] = \
             commit_msg['stamping']['app']['current_mode']
+        commit_msg['stamping']['app']['orig_current_mode_suffix'] = \
+            commit_msg['stamping']['app']['current_mode_suffix']
 
         tmp_ver = tag_name.replace(
             '{0}_'.format(commit_msg['stamping']['app']['name']),
@@ -303,6 +428,7 @@ class IVersionsStamper(object):
            prev_ver = commit_msg['stamping']['app']['_version']
            commit_msg['stamping']['app']['_version'] = tmp_ver
            commit_msg['stamping']['app']['current_mode'] = 'release'
+           commit_msg['stamping']['app']['current_mode_suffix'] = ''
            commit_msg['stamping']['app']['previous_version'] = prev_ver
            commit_msg['stamping']['app']['version'] = \
                self.get_formatted_version(tmp_ver)
@@ -357,7 +483,10 @@ class IVersionsStamper(object):
 
             ver_conf_yml = {
                 "conf": {
-                    "template": self._version_template,
+                    "semver_template": self._semver_template,
+                    "hotfix_template": self._hotfix_template,
+                    "prerelease_template": self._prerelease_template,
+                    "buildmetadata_template": self._buildmetadata_template,
                     "deps": self._raw_configured_deps,
                     "extra_info": self._extra_info,
                 },
@@ -493,12 +622,12 @@ class VersionControlStamper(IVersionsStamper):
             )
             if self._backend.changeset() != self._backend.changeset(tag=tag_name):
                 raise RuntimeError(
-                    'Releasing a release candidate is only possile when the repository '
+                    'Releasing a release candidate is only possible when the repository '
                     'state is on the exact version. Please vmn goto the version you\'d '
                     'like to release.'
                 )
 
-            _, version, _ = \
+            _, version, _, _, _ = \
                 stamp_utils.VersionControlBackend.get_tag_properties(
                     tag_name
                 )
@@ -1164,7 +1293,6 @@ def _goto_version(deps, root):
             'of the required repos. See log above'
         )
 
-
 def build_world(name, working_dir, root=False):
     params = {
         'name': name,
@@ -1232,10 +1360,20 @@ def build_world(name, working_dir, root=False):
             }
         }
     }
-    params['version_template'] = '{0}.{1}.{2}_{3}-${4}'
+
+    params['semver_template'] = '{major}.{minor}.{patch}'
+    params['hotfix_template'] = '_{hotfix}'
+    params['prerelease_template'] = '-{prerelease}'
+    params['buildmetadata_template'] = '+{buildmetadata}'
+    params['version_template'], _, _, _, _ = IVersionsStamper.parse_template(
+        params['semver_template'],
+        params['hotfix_template'],
+        params['prerelease_template'],
+        params['buildmetadata_template'],
+    )
+
     params["extra_info"] = False
     # TODO: handle redundant parse template here
-    IVersionsStamper.parse_template(params['version_template'])
 
     deps = {}
     for rel_path, dep in params['raw_configured_deps'].items():
@@ -1253,12 +1391,14 @@ def build_world(name, working_dir, root=False):
 
     with open(app_conf_path, 'r') as f:
         data = yaml.safe_load(f)
-        ver_template = data["conf"]["template"]
-        ver_template = '{0}_{1}'.format(
-            ver_template,
-            data["conf"]["rc_template"]
-        )
-        params['version_template'] = ver_template
+        params['semver_template'] = data["conf"]["semver_template"]
+        params['version_template'] = params['semver_template']
+        params['hotfix_template'] = data["conf"]["hotfix_template"]
+        params['version_template'] += params['hotfix_template']
+        params['prerelease_template'] = data["conf"]["prerelease_template"]
+        params['version_template'] += params['prerelease_template']
+        params['buildmetadata_template'] = data["conf"]["buildmetadata_template"]
+        params['version_template'] += params['buildmetadata_template']
         params["extra_info"] = data["conf"]["extra_info"]
         params['raw_configured_deps'] = data["conf"]["deps"]
 
@@ -1322,15 +1462,20 @@ def main(command_line=None):
     pstamp = subprasers.add_parser('stamp', help='stamp version')
     pstamp.add_argument(
         '-r', '--release-mode',
-        choices=['major', 'minor', 'patch'],
+        choices=['major', 'minor', 'patch', 'hotfix'],
         default=None,
-        help='major / minor / patch'
+        help='major / minor / patch / hotfix'
     )
     pstamp.add_argument(
         '-m', '--mode',
         default=None,
         help='Version mode. Can be anything really until you decide '
              'to set the mode to be release again'
+    )
+    pstamp.add_argument(
+        '-ms', '--mode-suffix',
+        default='',
+        help='Version mode suffix. Can be anything'
     )
     pstamp.add_argument(
         '-s', '--starting-version',
@@ -1380,10 +1525,9 @@ def main(command_line=None):
         root = args.root
 
     if 'name' in args:
-        prefix = stamp_utils.MOVING_COMMIT_PREFIX
-        if args.name.startswith(prefix):
+        if args.name.startswith('/'):
             raise RuntimeError(
-                'App name cannot start with {0}'.format(prefix)
+                'App name cannot start with {0}'.format('/')
             )
 
         params = build_world(args.name, cwd, root)
@@ -1417,6 +1561,7 @@ def main(command_line=None):
         params['release_mode'] = None
         params['starting_version'] = '0.0.0'
         params['mode'] = None
+        params['mode_suffix'] = None
         vcs = VersionControlStamper(params)
         err = show(vcs, params, version)
         del vcs
@@ -1424,6 +1569,8 @@ def main(command_line=None):
         params['release_mode'] = args.release_mode
         params['starting_version'] = args.starting_version
         params['mode'] = args.mode
+        params['mode_suffix'] = args.mode_suffix
+        params['buildmetadata'] = None
         vcs = VersionControlStamper(params)
         err = stamp(vcs, params, args.pull, args.init_only)
         del vcs

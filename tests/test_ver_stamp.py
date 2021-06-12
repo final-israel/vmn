@@ -21,6 +21,8 @@ def test_basic_stamp(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '0.0.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
@@ -32,6 +34,8 @@ def test_basic_stamp(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '1.0.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
@@ -45,6 +49,8 @@ def test_basic_stamp(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '1.0.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params, init_only=True)
@@ -59,6 +65,8 @@ def test_basic_stamp(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '3.1.34'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
@@ -77,6 +85,8 @@ def test_basic_show(app_layout, capfd):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '0.0.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
@@ -88,6 +98,8 @@ def test_basic_show(app_layout, capfd):
     params['verbose'] = False
     params['starting_version'] = '0.0.0'
     params['mode'] = None
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['release_mode'] = 'patch'
     params['raw'] = False
     vcs = vmn.VersionControlStamper(params)
@@ -120,12 +132,17 @@ def test_multi_repo_dependency(app_layout):
 
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '0.0.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
 
     conf = {
-        'template': '{0}.{1}.{2}',
+        'semver_template': '{major}.{minor}.{patch}',
+        'hotfix_template': '_{hotfix}',
+        'prerelease_template': '-{prerelease}',
+        'buildmetadata_template': '+{buildmetadata}',
         'deps': {'../': {
             'test_repo': {
                 'vcs_type': app_layout.be_type,
@@ -151,6 +168,8 @@ def test_multi_repo_dependency(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '0.0.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
@@ -180,12 +199,17 @@ def test_goto_deleted_repos(app_layout):
 
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '0.0.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
 
     conf = {
-        'template': '{0}.{1}.{2}',
+        'semver_template': '{major}.{minor}.{patch}',
+        'hotfix_template': '_{hotfix}',
+        'prerelease_template': '-{prerelease}',
+        'buildmetadata_template': '+{buildmetadata}',
         'deps': {'../': {
             'test_repo': {
                 'vcs_type': app_layout.be_type,
@@ -213,6 +237,8 @@ def test_goto_deleted_repos(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '0.0.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
@@ -232,6 +258,8 @@ def test_basic_root_stamp(app_layout):
 
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '0.0.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
@@ -248,6 +276,8 @@ def test_basic_root_stamp(app_layout):
 
     app2_params['release_mode'] = 'minor'
     app2_params['mode'] = 'release'
+    app2_params['mode_suffix'] = ''
+    app2_params['buildmetadata'] = None
     app2_params['starting_version'] = '0.0.0'
     vcs = vmn.VersionControlStamper(app2_params)
     vmn.stamp(vcs, app2_params)
@@ -267,6 +297,8 @@ def test_starting_version(app_layout):
 
     params['release_mode'] = 'minor'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '1.2.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
@@ -283,6 +315,8 @@ def test_rc_stamping(app_layout):
     vmn.init(params)
 
     params['mode'] = 'rc'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     for i in range(2):
         params['release_mode'] = 'minor'
         params['starting_version'] = '1.2.0'
@@ -292,12 +326,14 @@ def test_rc_stamping(app_layout):
         ver_info = vcs.get_vmn_version_info(app_name=params['name'])
         del vcs
         data = ver_info['stamping']['app']
-        assert data['version'] == '1.3.0_rc-1'
+        assert data['version'] == '1.3.0-rc1'
 
     app_layout.write_file_commit_and_push(
         'test_repo', 'f1.file', 'msg1'
     )
     params['mode'] = 'rc'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['release_mode'] = None
     params['starting_version'] = '1.2.0'
     vcs = vmn.VersionControlStamper(params)
@@ -305,12 +341,14 @@ def test_rc_stamping(app_layout):
 
     ver_info = vcs.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
-    assert data['version'] == '1.3.0_rc-2'
+    assert data['version'] == '1.3.0-rc2'
 
     app_layout.write_file_commit_and_push(
         'test_repo', 'f1.file', 'msg1'
     )
     params['mode'] = 'beta'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['release_mode'] = None
     params['starting_version'] = '0.0.0'
     vcs = vmn.VersionControlStamper(params)
@@ -318,12 +356,14 @@ def test_rc_stamping(app_layout):
 
     ver_info = vcs.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
-    assert data['version'] == '1.3.0_beta-1'
+    assert data['version'] == '1.3.0-beta1'
 
     app_layout.write_file_commit_and_push(
         'test_repo', 'f1.file', 'msg1'
     )
     params['mode'] = None
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['release_mode'] = None
     params['starting_version'] = '0.0.0'
     vcs = vmn.VersionControlStamper(params)
@@ -332,9 +372,11 @@ def test_rc_stamping(app_layout):
     ver_info = vcs.get_vmn_version_info(app_name=params['name'])
 
     data = ver_info['stamping']['app']
-    assert data['version'] == '1.3.0_beta-2'
+    assert data['version'] == '1.3.0-beta2'
 
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['release_mode'] = None
     params['starting_version'] = '0.0.0'
     vcs = vmn.VersionControlStamper(params)
@@ -351,6 +393,8 @@ def test_version_template(app_layout):
 
     params['release_mode'] = 'minor'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '1.2.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
@@ -358,19 +402,42 @@ def test_version_template(app_layout):
     configured_template = None
     with open(params['app_conf_path'], 'r') as f:
         data = yaml.safe_load(f)
-        configured_template = data['conf']['template']
+        semver_template = data['conf']['semver_template']
+        hotfix_template = data['conf']['hotfix_template']
+        prerelease_template = data['conf']['prerelease_template']
+        buildmetadata_template = data['conf']['buildmetadata_template']
 
     ver_info = vcs.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
     assert data['version'] == '1.3.0'
-    vcs._version_template, vcs._version_template_octats_count = \
-        vmn.IVersionsStamper.parse_template(configured_template)
+    vcs._version_template, \
+    vcs._semver_template, \
+    vcs._hotfix_template, \
+    vcs._prerelease_template, \
+    vcs._buildmetadata_template = vmn.IVersionsStamper.parse_template(
+        semver_template,
+        hotfix_template,
+        prerelease_template,
+        buildmetadata_template,
+    )
     formated_version = vcs.get_formatted_version('1.3.0')
     assert data['version'] == formated_version
 
-    template = 'ap{0}xx{0}XX{1}AC@{0}{2}C'
-    vcs._version_template, vcs._version_template_octats_count = \
-        vmn.IVersionsStamper.parse_template(template)
+    semver_template = 'ap{major}xx{major}XX{minor}AC@{major}{patch}C'
+    hotfix_template = '_{hotfix}'
+    prerelease_template = '-{prerelease}'
+    buildmetadata_template = '+{buildmetadata}'
+    vcs._version_template, \
+    vcs._semver_template, \
+    vcs._hotfix_template, \
+    vcs._prerelease_template, \
+    vcs._buildmetadata_template = vmn.IVersionsStamper.parse_template(
+        semver_template,
+        hotfix_template,
+        prerelease_template,
+        buildmetadata_template,
+    )
+
     formated_version = vcs.get_formatted_version('2.0.9')
     assert formated_version == 'ap2xxXX0AC@9C'
 
@@ -379,28 +446,79 @@ def test_version_template(app_layout):
     )
     params['release_mode'] = 'minor'
     params['mode'] = 'dev'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     vcs = vmn.VersionControlStamper(params)
-    template = 'ap{0}.{1}.@{2}'
-    vcs._version_template, vcs._version_template_octats_count = \
-        vmn.IVersionsStamper.parse_template(template)
+    semver_template = 'ap{major}.{minor}.@{patch}'
+    hotfix_template = '_{hotfix}'
+    prerelease_template = '-{prerelease}'
+    buildmetadata_template = '+{buildmetadata}'
+    vcs._version_template, \
+    vcs._semver_template, \
+    vcs._hotfix_template, \
+    vcs._prerelease_template, \
+    vcs._buildmetadata_template = vmn.IVersionsStamper.parse_template(semver_template,
+        hotfix_template,
+        prerelease_template,
+        buildmetadata_template,
+    )
     vmn.stamp(vcs, params)
     ver_info = vcs.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
-    assert data['version'] == 'ap1.4.@0_dev-1'
+    assert data['version'] == 'ap1.4.@0-dev1'
+
+    params['release_mode'] = None
+    params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
+    vcs = vmn.VersionControlStamper(params)
+    semver_template = 'ap{major}.{minor}.@{patch}'
+    hotfix_template = '_{hotfix}'
+    prerelease_template = '-{prerelease}'
+    buildmetadata_template = '+{buildmetadata}'
+    vcs._version_template, \
+    vcs._semver_template, \
+    vcs._hotfix_template, \
+    vcs._prerelease_template, \
+    vcs._buildmetadata_template = vmn.IVersionsStamper.parse_template(
+        semver_template,
+        hotfix_template,
+        prerelease_template,
+        buildmetadata_template,
+    )
+    vmn.stamp(vcs, params)
+    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
+    data = ver_info['stamping']['app']
+    assert data['version'] == 'ap1.4.@0'
+
     app_layout.write_file_commit_and_push(
         'test_repo', 'f1.file', 'msg2'
     )
     params['release_mode'] = 'minor'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
+    vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
-    assert data['version'] == 'ap1.4.@0'
+    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
+    data = ver_info['stamping']['app']
+    assert data['version'] == '1.5.0'
 
-
-    template = 'ap{0}xx{0}XX{1}AC@{0}{2}ABC{rc}AA{rcver}C'
-    vcs._version_template, vcs._version_template_octats_count = \
-        vmn.IVersionsStamper.parse_template(template)
-    formated_version = vcs.get_formatted_version('2.0.9_alpha-3')
-    assert formated_version == 'ap2xxXX0AC@9ABCalphaAA3C'
+    semver_template = 'ap{major}xx{minor}XX{patch}AC@{major}'
+    hotfix_template = '-{hotfix}'
+    prerelease_template = 'ABC{prerelease}'
+    buildmetadata_template = 'AA{buildmetadata}C'
+    vcs._version_template, \
+    vcs._semver_template, \
+    vcs._hotfix_template, \
+    vcs._prerelease_template, \
+    vcs._buildmetadata_template = vmn.IVersionsStamper.parse_template(semver_template,
+        hotfix_template,
+        prerelease_template,
+        buildmetadata_template,
+    )
+    formated_version = vcs.get_formatted_version('2.0.9-alpha.3')
+    assert formated_version == 'ap2xx0XX9AC@ABCalpha.3'
 
 
 def test_basic_goto(app_layout):
@@ -412,6 +530,8 @@ def test_basic_goto(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '0.0.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
@@ -425,6 +545,8 @@ def test_basic_goto(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '1.0.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
@@ -457,6 +579,8 @@ def test_stamp_on_branch_merge_squash(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '0.0.0'
     app_layout._app_backend.be.checkout(('-b', 'new_branch'))
     app_layout.write_file_commit_and_push('test_repo', 'f1.file', 'msg1')
@@ -491,6 +615,8 @@ def test_get_version(app_layout):
     vmn.init(params)
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '0.0.0'
     app_layout._app_backend.be.checkout(('-b', 'new_branch'))
     app_layout.write_file_commit_and_push('test_repo', 'f1.file', 'msg1')
@@ -513,6 +639,8 @@ def test_get_version_number_from_file(app_layout):
     vmn.init(params)
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '0.2.0'
     # just to create the relative folder tree,
     # I.E: .vmn/app_name/last_known_app_version.yml
@@ -527,6 +655,8 @@ def test_read_version_from_file(app_layout):
     vmn.init(params)
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '0.1.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
@@ -545,6 +675,8 @@ def test_system_backward_comp_file_vs_commit(app_layout):
     vmn.init(params)
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '0.1.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
@@ -567,6 +699,8 @@ def test_manual_file_adjustment(app_layout):
     vmn.init(params)
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '0.1.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
@@ -590,6 +724,8 @@ def test_basic_root_show(app_layout,capfd):
 
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
+    params['mode_suffix'] = ''
+    params['buildmetadata'] = None
     params['starting_version'] = '0.0.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
@@ -605,6 +741,8 @@ def test_basic_root_show(app_layout,capfd):
 
     app2_params['release_mode'] = 'minor'
     app2_params['mode'] = 'release'
+    app2_params['mode_suffix'] = ''
+    app2_params['buildmetadata'] = None
     app2_params['starting_version'] = '0.0.0'
     vcs = vmn.VersionControlStamper(app2_params)
     vmn.stamp(vcs, app2_params)
