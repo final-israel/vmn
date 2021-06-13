@@ -74,14 +74,6 @@ class IVersionsStamper(object):
             self._current_mode = self.ver_info_form_repo['stamping']['app']["orig_current_mode"]
             self._current_mode_suffix = self.ver_info_form_repo['stamping']['app']["orig_current_mode_suffix"]
 
-        if self._current_mode == 'release' and self._release_mode is None:
-            del self._backend
-
-            raise RuntimeError(
-                'When stamping from a previous release version '
-                'a release mode must be specified'
-            )
-
         self._releasing_rc = (
                 self._current_mode != 'release' and
                 self._release_mode is None and
@@ -803,6 +795,12 @@ def get_version(versions_be_ifc, pull, init_only):
     if pull:
         versions_be_ifc.retrieve_remote_changes()
 
+    if versions_be_ifc._current_mode == 'release' and versions_be_ifc._release_mode is None:
+        raise RuntimeError(
+            'When stamping from a previous release version '
+            'a release mode must be specified'
+        )
+
     if versions_be_ifc.tracked and init_only:
         raise RuntimeError("Will not init an already tracked app")
 
@@ -1458,6 +1456,7 @@ def main(command_line=None):
     )
     pshow.add_argument('-m', '--mode')
     pshow.add_argument('-mv', '--mode_version', default=None)
+    pshow.add_argument('-ms', '--mode_suffix', default='')
     pshow.add_argument('--root', dest='root', action='store_true')
     pshow.set_defaults(root=False)
     pshow.add_argument('--verbose', dest='verbose', action='store_true')
@@ -1508,6 +1507,7 @@ def main(command_line=None):
     )
     pgoto.add_argument('-m', '--mode')
     pgoto.add_argument('-mv', '--mode_version', default=None)
+    pgoto.add_argument('-ms', '--mode_suffix', default='')
     pgoto.add_argument('--root', dest='root', action='store_true')
     pgoto.set_defaults(root=False)
     pgoto.add_argument('--deps-only', dest='deps_only', action='store_true')
@@ -1538,6 +1538,11 @@ def main(command_line=None):
                 'App name cannot start with {0}'.format('/')
             )
 
+        if '-' in args.name:
+            raise RuntimeError(
+                'App name cannot contain {0}'.format('-')
+            )
+
         params = build_world(args.name, cwd, root)
     else:
         params = build_world(None, cwd)
@@ -1559,17 +1564,20 @@ def main(command_line=None):
         if version is not None and \
                 args.mode is not None and \
                 args.mode_version is not None:
-            version = '{0}_{1}-{2}'.format(
+            version = '{0}_{1}-{2}{3}'.format(
                 version,
                 args.mode,
-                args.mode_version
+                args.mode_version,
+                args.mode_suffix
             )
+            #TODO: check version with VMN_REGEX
 
         # TODO: handle cmd specific params differently
         params['release_mode'] = None
         params['starting_version'] = '0.0.0'
-        params['mode'] = None
-        params['mode_suffix'] = None
+        params['mode'] = args.mode
+        params['mode_suffix'] = args.mode_suffix
+        params['buildmetadata'] = None
         vcs = VersionControlStamper(params)
         err = show(vcs, params, version)
         del vcs
@@ -1583,13 +1591,22 @@ def main(command_line=None):
         err = stamp(vcs, params, args.pull, args.init_only)
         del vcs
     elif args.command == 'goto':
+        params['release_mode'] = None
+        params['starting_version'] = '0.0.0'
+        params['mode'] = args.mode
+        params['mode_suffix'] = args.mode_suffix
+        params['buildmetadata'] = None
         version = args.version
-        if args.mode is not None and args.mode_version is not None:
-            version = '{0}_{1}-{2}'.format(
+        if version is not None and \
+                args.mode is not None and \
+                args.mode_version is not None:
+            version = '{0}_{1}-{2}{3}'.format(
                 version,
                 args.mode,
-                args.mode_version
+                args.mode_version,
+                args.mode_suffix,
             )
+            # TODO: check version with VMN_REGEX
 
         params['deps_only'] = args.deps_only
         vcs = VersionControlStamper(params)
