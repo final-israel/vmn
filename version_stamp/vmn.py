@@ -607,6 +607,38 @@ class VersionControlStamper(IVersionsStamper):
             override_current_version=None,
     ):
         old_version = self.decide_app_version_by_source()
+        if self._buildmetadata:
+            self._should_publish = False
+            tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+                self._name, old_version
+            )
+            if self._backend.changeset() != self._backend.changeset(tag=tag_name):
+                raise RuntimeError(
+                    'Releasing a release candidate is only possible when the repository '
+                    'state is on the exact version. Please vmn goto the version you\'d '
+                    'like to release.'
+                )
+
+            _, version, hotfix, prerelease, _ = \
+                stamp_utils.VersionControlBackend.get_tag_properties(
+                    tag_name
+                )
+
+            if hotfix is not None:
+                version = f'{version}_{hotfix}'
+            if prerelease is not None:
+                version = f'{version}-{prerelease}'
+
+            version = f'{version}+{self._buildmetadata}'
+
+            tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+                self._name, version
+            )
+
+            self._backend.tag([tag_name], user='vmn', force=True)
+
+            return version
+
         if self._releasing_rc:
             self._should_publish = False
             tag_name = stamp_utils.VersionControlBackend.get_tag_name(
@@ -619,10 +651,13 @@ class VersionControlStamper(IVersionsStamper):
                     'like to release.'
                 )
 
-            _, version, _, _, _ = \
+            _, version, hotfix, _, _ = \
                 stamp_utils.VersionControlBackend.get_tag_properties(
                     tag_name
                 )
+
+            if hotfix is not None:
+                version = f'{version}_{hotfix}'
 
             tag_name = stamp_utils.VersionControlBackend.get_tag_name(
                 self._name, version
@@ -1299,11 +1334,17 @@ def _goto_version(deps, root):
             'of the required repos. See log above'
         )
 
+
 def build_world(name, working_dir, root=False):
     params = {
         'name': name,
         'working_dir': working_dir,
-        'root': root
+        'root': root,
+        'release_mode': None,
+        'starting_version': '0.0.0',
+        'mode': None,
+        'mode_suffix': '',
+        'buildmetadata': None,
     }
 
     be, err = stamp_utils.get_client(params['working_dir'])
@@ -1457,6 +1498,7 @@ def main(command_line=None):
     pshow.add_argument('-m', '--mode')
     pshow.add_argument('-mv', '--mode_version', default=None)
     pshow.add_argument('-ms', '--mode_suffix', default='')
+    pshow.add_argument('-bm', '--build_metadata', default=None)
     pshow.add_argument('--root', dest='root', action='store_true')
     pshow.set_defaults(root=False)
     pshow.add_argument('--verbose', dest='verbose', action='store_true')
@@ -1484,6 +1526,7 @@ def main(command_line=None):
         default='',
         help='Version mode suffix. Can be anything'
     )
+    pstamp.add_argument('-bm', '--build_metadata', default=None)
     pstamp.add_argument(
         '-s', '--starting-version',
         default='0.0.0',
@@ -1508,6 +1551,7 @@ def main(command_line=None):
     pgoto.add_argument('-m', '--mode')
     pgoto.add_argument('-mv', '--mode_version', default=None)
     pgoto.add_argument('-ms', '--mode_suffix', default='')
+    pgoto.add_argument('-bm', '--build_metadata', default='')
     pgoto.add_argument('--root', dest='root', action='store_true')
     pgoto.set_defaults(root=False)
     pgoto.add_argument('--deps-only', dest='deps_only', action='store_true')
@@ -1564,20 +1608,17 @@ def main(command_line=None):
         if version is not None and \
                 args.mode is not None and \
                 args.mode_version is not None:
-            version = '{0}_{1}-{2}{3}'.format(
-                version,
-                args.mode,
-                args.mode_version,
-                args.mode_suffix
-            )
-            #TODO: check version with VMN_REGEX
+            version = f'{version}_{args.mode}-{args.mode_version}' \
+                      f'{args.mode_suffix}'
+        if version is not None and args.build_metadata is not None:
+            version = f'{version}+{args.build_metadata}'
+
+        #TODO: check version with VMN_REGEX
 
         # TODO: handle cmd specific params differently
-        params['release_mode'] = None
-        params['starting_version'] = '0.0.0'
         params['mode'] = args.mode
         params['mode_suffix'] = args.mode_suffix
-        params['buildmetadata'] = None
+        params['buildmetadata'] = args.build_metadata
         vcs = VersionControlStamper(params)
         err = show(vcs, params, version)
         del vcs
@@ -1586,27 +1627,24 @@ def main(command_line=None):
         params['starting_version'] = args.starting_version
         params['mode'] = args.mode
         params['mode_suffix'] = args.mode_suffix
-        params['buildmetadata'] = None
+        params['buildmetadata'] = args.build_metadata
         vcs = VersionControlStamper(params)
         err = stamp(vcs, params, args.pull, args.init_only)
         del vcs
     elif args.command == 'goto':
-        params['release_mode'] = None
-        params['starting_version'] = '0.0.0'
         params['mode'] = args.mode
         params['mode_suffix'] = args.mode_suffix
-        params['buildmetadata'] = None
+        params['buildmetadata'] = args.build_metadata
         version = args.version
         if version is not None and \
                 args.mode is not None and \
                 args.mode_version is not None:
-            version = '{0}_{1}-{2}{3}'.format(
-                version,
-                args.mode,
-                args.mode_version,
-                args.mode_suffix,
-            )
-            # TODO: check version with VMN_REGEX
+            version = f'{version}_{args.mode}-{args.mode_version}' \
+                      f'{args.mode_suffix}'
+        if version is not None and args.build_metadata is not None:
+                version = f'{version}+{args.build_metadata}'
+
+        # TODO: check version with VMN_REGEX
 
         params['deps_only'] = args.deps_only
         vcs = VersionControlStamper(params)
