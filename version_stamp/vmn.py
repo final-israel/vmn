@@ -8,8 +8,6 @@ import os
 import pathlib
 from filelock import FileLock
 from multiprocessing import Pool
-import random
-import time
 import re
 from packaging import version as pversion
 
@@ -28,7 +26,7 @@ class IVersionsStamper(object):
     def __init__(self, conf):
         self._name = conf['name']
         self._root_path = conf['root_path']
-        self._backend, _ = stamp_utils.get_client(self._root_path)
+        self.backend, _ = stamp_utils.get_client(self._root_path)
         self._release_mode = conf['release_mode']
         self._app_dir_path = conf['app_dir_path']
         self._app_conf_path = conf['app_conf_path']
@@ -118,7 +116,7 @@ class IVersionsStamper(object):
             }
 
     def __del__(self):
-        del self._backend
+        del self.backend
 
     def gen_app_version(self, current_version):
         match = re.search(
@@ -352,7 +350,7 @@ class IVersionsStamper(object):
         commit_tag_obj = None
         if tag_name is not None:
             try:
-                commit_tag_obj = self._backend._be.commit(tag_name)
+                commit_tag_obj = self.backend._be.commit(tag_name)
             except:
                 return None
         elif app_name is not None or root_app_name is not None:
@@ -366,10 +364,10 @@ class IVersionsStamper(object):
             formated_tag_name = stamp_utils.VersionControlBackend.get_tag_name(
                 used_app_name
             )
-            tags = self._backend.tags(filter='{}_*'.format(formated_tag_name))
+            tags = self.backend.tags(filter='{}_*'.format(formated_tag_name))
 
             for tag in tags:
-                _app_name, version, hotfix, prerelease, buildmetadata = \
+                _app_name, version, hotfix, prerelease, buildmetadata, releasenotes = \
                     stamp_utils.VersionControlBackend.get_tag_properties(tag, root=root)
                 if version is None:
                     continue
@@ -377,7 +375,7 @@ class IVersionsStamper(object):
                 if _app_name != used_app_name:
                     continue
 
-                _commit_tag_obj = self._backend._be.commit(tag)
+                _commit_tag_obj = self.backend._be.commit(tag)
                 if _commit_tag_obj.author.name != stamp_utils.VMN_USER_NAME:
                     continue
 
@@ -399,7 +397,7 @@ class IVersionsStamper(object):
         # TODO:: Check API commit version
 
         commit_msg = yaml.safe_load(
-            self._backend._be.commit(tag_name).message
+            self.backend._be.commit(tag_name).message
         )
 
         if commit_msg is None or 'stamping' not in commit_msg:
@@ -452,9 +450,9 @@ class IVersionsStamper(object):
                 flat_dependency_repos.append(
                     os.path.relpath(
                         os.path.join(
-                            self._backend.root(), rel_path, repo
+                            self.backend.root(), rel_path, repo
                         ),
-                        self._backend.root()
+                        self.backend.root()
                     ),
                 )
 
@@ -539,7 +537,7 @@ class VersionControlStamper(IVersionsStamper):
 
         # Try to find any version of the application matching the
         # user's repositories local state
-        for tag in self._backend.tags():
+        for tag in self.backend.tags():
             if not re.match(
                 r'{}_(\d+\.\d+\.\d+)_?(.+[0-9]+)*$'.format(app_tag_name),
                 tag
@@ -559,7 +557,7 @@ class VersionControlStamper(IVersionsStamper):
                 # when k is the "main repo" repo
                 if self._repo_name == k:
                     user_changeset = \
-                        self._backend.last_user_changeset()
+                        self.backend.last_user_changeset()
 
                     if v['hash'] != user_changeset:
                         found = False
@@ -602,70 +600,81 @@ class VersionControlStamper(IVersionsStamper):
 
         return version
 
+    def add_to_version(self):
+        if not self._buildmetadata:
+            raise RuntimeError("TODO xxx")
+
+        old_version = self.decide_app_version_by_source()
+
+        self._should_publish = False
+        tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+            self._name, old_version
+        )
+        if self.backend.changeset() != self.backend.changeset(tag=tag_name):
+            raise RuntimeError(
+                'Releasing a release candidate is only possible when the repository '
+                'state is on the exact version. Please vmn goto the version you\'d '
+                'like to release.'
+            )
+
+        _, version, hotfix, prerelease, _ = \
+            stamp_utils.VersionControlBackend.get_tag_properties(
+                tag_name
+            )
+
+        if hotfix is not None:
+            version = f'{version}_{hotfix}'
+        if prerelease is not None:
+            version = f'{version}-{prerelease}'
+
+        version = f'{version}+{self._buildmetadata}'
+
+        tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+            self._name, version
+        )
+
+        self.backend.tag([tag_name], user='vmn')
+
+        return version
+
+    def release_app_version(self):
+        if not self._releasing_rc:
+            raise RuntimeError("No prerelease version to release")
+
+        old_version = self.decide_app_version_by_source()
+
+        self._should_publish = False
+        tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+            self._name, old_version
+        )
+        if self.backend.changeset() != self.backend.changeset(tag=tag_name):
+            raise RuntimeError(
+                'Releasing a release candidate is only possible when the repository '
+                'state is on the exact version. Please vmn goto the version you\'d '
+                'like to release.'
+            )
+
+        _, version, hotfix, _, _ = \
+            stamp_utils.VersionControlBackend.get_tag_properties(
+                tag_name
+            )
+
+        if hotfix is not None:
+            version = f'{version}_{hotfix}'
+
+        tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+            self._name, version
+        )
+
+        self.backend.tag([tag_name], user='vmn')
+
+        return version
+
     def stamp_app_version(
             self,
             override_current_version=None,
     ):
         old_version = self.decide_app_version_by_source()
-        if self._buildmetadata:
-            self._should_publish = False
-            tag_name = stamp_utils.VersionControlBackend.get_tag_name(
-                self._name, old_version
-            )
-            if self._backend.changeset() != self._backend.changeset(tag=tag_name):
-                raise RuntimeError(
-                    'Releasing a release candidate is only possible when the repository '
-                    'state is on the exact version. Please vmn goto the version you\'d '
-                    'like to release.'
-                )
-
-            _, version, hotfix, prerelease, _ = \
-                stamp_utils.VersionControlBackend.get_tag_properties(
-                    tag_name
-                )
-
-            if hotfix is not None:
-                version = f'{version}_{hotfix}'
-            if prerelease is not None:
-                version = f'{version}-{prerelease}'
-
-            version = f'{version}+{self._buildmetadata}'
-
-            tag_name = stamp_utils.VersionControlBackend.get_tag_name(
-                self._name, version
-            )
-
-            self._backend.tag([tag_name], user='vmn', force=True)
-
-            return version
-
-        if self._releasing_rc:
-            self._should_publish = False
-            tag_name = stamp_utils.VersionControlBackend.get_tag_name(
-                self._name, old_version
-            )
-            if self._backend.changeset() != self._backend.changeset(tag=tag_name):
-                raise RuntimeError(
-                    'Releasing a release candidate is only possible when the repository '
-                    'state is on the exact version. Please vmn goto the version you\'d '
-                    'like to release.'
-                )
-
-            _, version, hotfix, _, _ = \
-                stamp_utils.VersionControlBackend.get_tag_properties(
-                    tag_name
-                )
-
-            if hotfix is not None:
-                version = f'{version}_{hotfix}'
-
-            tag_name = stamp_utils.VersionControlBackend.get_tag_name(
-                self._name, version
-            )
-
-            self._backend.tag([tag_name], user='vmn', force=True)
-
-            return version
 
         matched_version = self.find_matching_version()
         if matched_version == '0.0.0':
@@ -700,7 +709,7 @@ class VersionControlStamper(IVersionsStamper):
                 'A dependency repository was specified in '
                 'conf.yml file. However repo: {0} does not exist. '
                 'Please clone and rerun'.format(
-                    os.path.join(self._backend.root(), repo)
+                    os.path.join(self.backend.root(), repo)
                 )
             )
 
@@ -717,7 +726,7 @@ class VersionControlStamper(IVersionsStamper):
         self._version_info_message['stamping']['app']['info'] = \
             info
         self._version_info_message['stamping']['app']['stamped_on_branch'] =\
-            self._backend.get_active_branch()
+            self.backend.get_active_branch()
 
         return current_version
 
@@ -765,15 +774,36 @@ class VersionControlStamper(IVersionsStamper):
 
         return '{0}'.format(root_version)
 
+    def get_files_to_add_to_index(self, paths):
+        changed = [item.a_path for item in self.backend._be.index.diff(None)]
+        untracked = self.backend._be.untracked_files
+
+        version_files = []
+        for path in paths:
+            if path in changed:
+                version_files.append(path)
+            if self._app_conf_path in untracked:
+                version_files.append(path)
+
+        return version_files
+
     def publish(self, app_version, main_version):
         if not self._should_publish:
             return 0
 
-        version_files = [self._app_conf_path]
-        if app_version != '0.0.0':
-            version_files.append(self._version_file_path)
+        version_files = self.get_files_to_add_to_index(
+            [
+                self._app_conf_path,
+                self._version_file_path,
+            ]
+        )
+
         if self._root_app_name is not None:
-            version_files.append(self._root_app_conf_path)
+            tmp = self.get_files_to_add_to_index(
+                    [self._root_app_conf_path]
+            )
+            if tmp:
+                version_files.extend(tmp)
 
         self._version_info_message['stamping']['msg'] = \
             '{0}: update to version {1}'.format(
@@ -782,8 +812,8 @@ class VersionControlStamper(IVersionsStamper):
         msg = '{0}: Stamped version {1}\n\n'.format(
             self._name,
             app_version
-        ) + yaml.dump(self._version_info_message, sort_keys=True)
-        self._backend.commit(
+        )
+        self.backend.commit(
             message=msg,
             user='vmn',
             include=version_files
@@ -803,27 +833,162 @@ class VersionControlStamper(IVersionsStamper):
         all_tags.extend(tags)
 
         try:
-            self._backend.tag(tags, user='vmn')
+            tag_version_msg = yaml.dump(self._version_info_message, sort_keys=True)
+            self.backend.tag(tags, user='vmn', message=tag_version_msg)
         except Exception:
             LOGGER.exception('Logged Exception message:')
             LOGGER.info('Reverting vmn changes for tags: {0} ...'.format(tags))
-            self._backend.revert_vmn_changes(all_tags)
+            self.backend.revert_vmn_changes(all_tags)
 
             return 1
 
         try:
-            self._backend.push(all_tags)
+            self.backend.push(all_tags)
         except Exception:
             LOGGER.exception('Logged Exception message:')
             LOGGER.info('Reverting vmn changes for tags: {0} ...'.format(tags))
-            self._backend.revert_vmn_changes(all_tags)
+            self.backend.revert_vmn_changes(all_tags)
 
             return 2
 
         return 0
 
     def retrieve_remote_changes(self):
-        self._backend.pull()
+        self.backend.pull()
+
+
+def _init(vcs, params):
+    if os.path.isdir('{0}/.vmn'.format(params['root_path'])):
+        LOGGER.info('vmn tracking is already initialized')
+        return 1
+
+    be = vcs.backend
+    err = _safety_validation(vcs)
+    if err:
+        return err
+
+    changeset = be.changeset()
+
+    vmn_path = os.path.join(params['root_path'], '.vmn')
+    Path(vmn_path).mkdir(parents=True, exist_ok=True)
+    vmn_unique_path = os.path.join(vmn_path, changeset)
+    Path(vmn_unique_path).touch()
+    git_ignore_path = os.path.join(vmn_path, '.gitignore')
+
+    with open(git_ignore_path, 'w+') as f:
+        f.write('vmn.lock{0}'.format(os.linesep))
+
+    be.commit(
+        message=stamp_utils.INIT_COMMIT_MESSAGE,
+        user='vmn',
+        include=[vmn_path, vmn_unique_path, git_ignore_path]
+    )
+
+    be.push()
+
+    LOGGER.info('Initialized vmn tracking on {0}'.format(params['root_path']))
+
+    return err
+
+
+def show(vcs, params, version=None):
+    be = vcs.backend
+
+    if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
+        LOGGER.error('vmn tracking is not yet initialized')
+        return 1
+
+    if version is not None:
+        if params['root']:
+            try:
+                int(version)
+            except Exception:
+                LOGGER.error(
+                    'wrong version specified: root version '
+                    'must be an integer'
+                    )
+
+                return 1
+        else:
+            try:
+                _, _, _ = version.split('.')
+                try:
+                    pass
+                except ValueError:
+                    _, _, _, _ = version.split('.')
+            except ValueError:
+                LOGGER.error(
+                    'wrong version specified: version '
+                    'must be of form N1.N2.N3 or of form N1.N2.N3.N4 (if you use hotfix)'
+                )
+
+                return 1
+
+    tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+        params['name'],
+        version,
+    )
+
+    if version is None:
+        if params['root']:
+            ver_info = vcs.get_vmn_version_info(
+                root_app_name=params['root_app_name']
+            )
+        else:
+            ver_info = vcs.get_vmn_version_info(app_name=params['name'])
+    else:
+        ver_info = vcs.get_vmn_version_info(tag_name=tag_name)
+
+    if ver_info is None:
+        LOGGER.error(
+            'Version information was not found '
+            'for {0}.'.format(
+                params['name'],
+            )
+        )
+
+        return 1
+
+    data = ver_info['stamping']['app']
+    if params['root']:
+        data = ver_info['stamping']['root_app']
+        if not data:
+            LOGGER.error(
+                'App {0} does not have a root app '.format(
+                    params['name'],
+                )
+            )
+
+            return 1
+
+    if params.get('verbose'):
+        yaml.dump(data, sys.stdout)
+    elif params.get('raw'):
+        print(data['_version'])
+    else:
+        print(data['version'])
+
+    return 0
+
+
+def _safety_validation(versions_be_ifc):
+    be = versions_be_ifc.backend
+
+    err = be.check_for_git_user_config()
+    if err:
+        LOGGER.info('{0}. Exiting'.format(err))
+        return err
+
+    err = be.check_for_pending_changes()
+    if err:
+        LOGGER.info('{0}. Exiting'.format(err))
+        return err
+
+    if not be.in_detached_head():
+        err = be.check_for_outgoing_changes()
+        if err:
+            LOGGER.info('{0}. Exiting'.format(err))
+            return err
 
 
 def get_version(versions_be_ifc, pull, init_only):
@@ -898,217 +1063,16 @@ def get_version(versions_be_ifc, pull, init_only):
     return versions_be_ifc.get_be_formatted_version(current_version)
 
 
-def init(params):
-    be, err = stamp_utils.get_client(params['working_dir'])
-    if err:
-        LOGGER.error('{0}. Exiting'.format(err))
-        del be
-        return err
-
-    if os.path.isdir('{0}/.vmn'.format(params['root_path'])):
-        LOGGER.info('vmn tracking is already initialized')
-        del be
-        return err
-
-    err = be.check_for_pending_changes()
-    if err:
-        LOGGER.info('{0}. Exiting'.format(err))
-        del be
-        return err
-
-    err = be.check_for_outgoing_changes()
-    if err:
-        LOGGER.info('{0}. Exiting'.format(err))
-        del be
-        return err
-
-    changeset = be.changeset()
-
-    vmn_path = os.path.join(params['root_path'], '.vmn')
-    Path(vmn_path).mkdir(parents=True, exist_ok=True)
-    vmn_unique_path = os.path.join(vmn_path, changeset)
-    Path(vmn_unique_path).touch()
-    git_ignore_path = os.path.join(vmn_path, '.gitignore')
-
-    with open(git_ignore_path, 'w+') as f:
-        f.write('vmn.lock{0}'.format(os.linesep))
-
-    be.commit(
-        message=stamp_utils.INIT_COMMIT_MESSAGE,
-        user='vmn',
-        include=[vmn_path, vmn_unique_path, git_ignore_path]
-    )
-
-    be.push()
-    del be
-
-    LOGGER.info('Initialized vmn tracking on {0}'.format(params['root_path']))
-
-    return None
-
-
-def show(vcs, params, version=None):
-    be, err = stamp_utils.get_client(params['working_dir'])
-    if err:
-        LOGGER.error('{0}. Exiting'.format(err))
-        del be
-        return err
-
-    if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
-        LOGGER.error('vmn tracking is not yet initialized')
-        del be
-        return 1
-
-    if version is not None:
-        if params['root']:
-            try:
-                int(version)
-            except Exception:
-                LOGGER.error(
-                    'wrong version specified: root version '
-                    'must be an integer'
-                    )
-                del be
-                return 1
-        else:
-            try:
-                _, _, _ = version.split('.')
-            except ValueError:
-                LOGGER.error(
-                    'wrong version specified: version '
-                    'must be of form N1.N2.N3'
-                    )
-                del be
-                return 1
-
-    tag_name = stamp_utils.VersionControlBackend.get_tag_name(
-        params['name'],
-        version,
-    )
-
-    if version is None:
-        if params['root']:
-            ver_info = vcs.get_vmn_version_info(
-                root_app_name=params['root_app_name']
-            )
-        else:
-            ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    else:
-        ver_info = vcs.get_vmn_version_info(tag_name=tag_name)
-
-    if ver_info is None:
-        LOGGER.error(
-            'Version information was not found '
-            'for {0}.'.format(
-                params['name'],
-            )
-        )
-        del be
-
-        return 1
-
-    data = ver_info['stamping']['app']
-    if params['root']:
-        data = ver_info['stamping']['root_app']
-        if not data:
-            LOGGER.error(
-                'App {0} does not have a root app '.format(
-                    params['name'],
-                )
-            )
-            del be
-
-            return 1
-
-    if params.get('verbose'):
-        yaml.dump(data, sys.stdout)
-    elif params.get('raw'):
-        print(data['_version'])
-    else:
-        print(data['version'])
-
-    del be
-
-    return 0
-
-
-def stamp(versions_be_ifc, params, pull=False, init_only=False):
-    be, err = stamp_utils.get_client(params['working_dir'])
-    if err:
-        LOGGER.error('{0}. Exiting'.format(err))
-        del be
-        return err
-
-    if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
-        LOGGER.info('vmn tracking is not yet initialized')
-        del be
-        return err
-
-    err = be.check_for_git_user_config()
-    if err:
-        LOGGER.info('{0}. Exiting'.format(err))
-        return err
-
-    err = be.check_for_pending_changes()
-    if err:
-        LOGGER.info('{0}. Exiting'.format(err))
-        del be
-        return err
-
-    err = be.check_for_outgoing_changes()
-    if err:
-        LOGGER.info('{0}. Exiting'.format(err))
-        del be
-        return err
-
-    del be
-
-    lock_file_path = os.path.join(params['root_app_dir_path'], 'vmn.lock')
-    pathlib.Path(os.path.dirname(lock_file_path)).mkdir(
-        parents=True, exist_ok=True
-    )
-    lock = FileLock(lock_file_path)
-
-    with lock:
-        LOGGER.info('Locked: {0}'.format(lock_file_path))
-
-        version = get_version(versions_be_ifc, pull, init_only)
-        try:
-            pass
-        except Exception as exc:
-            LOGGER.exception('Logged Exception message:')
-
-            return 1
-
-        LOGGER.info(version)
-
-    LOGGER.info('Released locked: {0}'.format(lock_file_path))
-
-
 def goto_version(vcs, params, version):
-    be, err = stamp_utils.get_client(params['working_dir'])
-    if err:
-        LOGGER.error('{0}. Exiting'.format(err))
-        del be
-        return err
+    be = vcs.backend
 
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.info('vmn tracking is not yet initialized')
-        del be
-        return err
+        return 1
 
-    err = be.check_for_pending_changes()
+    err = _safety_validation(vcs)
     if err:
-        LOGGER.info('{0}. Exiting'.format(err))
-        del be
         return err
-
-    if not be.in_detached_head():
-        err = be.check_for_outgoing_changes()
-        if err:
-            LOGGER.info('{0}. Exiting'.format(err))
-            del be
-            return err
 
     if version is not None:
         if params['root']:
@@ -1119,18 +1083,20 @@ def goto_version(vcs, params, version):
                     'wrong version specified: root version '
                     'must be an integer'
                     )
-                del be
 
                 return 1
         else:
             try:
                 _, _, _ = version.split('.')
+                try:
+                    pass
+                except ValueError:
+                    _, _, _, _ = version.split('.')
             except ValueError:
                 LOGGER.error(
                     'wrong version specified: version '
-                    'must be of form N1.N2.N3'
+                    'must be of form N1.N2.N3 or of form N1.N2.N3.N4 (if you use hotfix)'
                     )
-                del be
 
                 return 1
 
@@ -1151,7 +1117,6 @@ def goto_version(vcs, params, version):
 
     if ver_info is None:
         LOGGER.error('No such app: {0}'.format(params['name']))
-        del be
         return 1
 
     data = ver_info['stamping']['app']
@@ -1176,11 +1141,8 @@ def goto_version(vcs, params, version):
                     params['name'], version
                 )
             )
-            del be
 
             return 1
-
-    del be
 
     return 0
 
@@ -1463,6 +1425,175 @@ def build_world(name, working_dir, root=False):
 
 
 def main(command_line=None):
+    args = parse_user_commands(command_line)
+
+    cwd = os.getcwd()
+    if 'VMN_WORKING_DIR' in os.environ:
+        cwd = os.environ['VMN_WORKING_DIR']
+
+    global LOGGER
+    LOGGER = stamp_utils.init_stamp_logger(args.debug)
+    if args.command == 'show':
+        LOGGER.disabled = True
+
+    root = False
+    if 'root' in args:
+        root = args.root
+
+    initial_params = {
+        'root': root,
+        'cwd': cwd,
+        'name': None
+    }
+
+    if 'name' in args:
+        validate_app_name(args)
+        initial_params['name'] = args.name
+
+    params = build_world(
+        initial_params['name'],
+        initial_params['cwd'],
+        initial_params['root']
+    )
+
+    lock_file_path = os.path.join(params['root_path'], 'vmn.lock')
+    pathlib.Path(os.path.dirname(lock_file_path)).mkdir(
+        parents=True, exist_ok=True
+    )
+    lock = FileLock(lock_file_path)
+
+    err = 0
+    with lock:
+        LOGGER.info('Locked: {0}'.format(lock_file_path))
+        if args.command == 'init':
+            err = _init(args, params)
+        if args.command == 'show':
+            err = _handle_show(LOGGER, args, params)
+        elif args.command == 'stamp':
+            err = _handle_stamp(args, params)
+        elif args.command == 'goto':
+            err = _handle_goto(args, params)
+        elif args.command == 'release':
+            err = _handle_release(args, params)
+
+    LOGGER.info('Released locked: {0}'.format(lock_file_path))
+    return err
+
+
+def validate_app_name(args):
+    if args.name.startswith('/'):
+        raise RuntimeError(
+            'App name cannot start with {0}'.format('/')
+        )
+    if '-' in args.name:
+        raise RuntimeError(
+            'App name cannot contain {0}'.format('-')
+        )
+
+
+def _handle_goto(args, params):
+    params['mode'] = args.mode
+    params['mode_suffix'] = args.mode_suffix
+    params['buildmetadata'] = args.build_metadata
+    version = args.version
+    if version is not None and \
+            args.mode is not None and \
+            args.mode_version is not None:
+        version = f'{version}_{args.mode}-{args.mode_version}' \
+                  f'{args.mode_suffix}'
+    if version is not None and args.build_metadata is not None:
+        version = f'{version}+{args.build_metadata}'
+    # TODO: check version with VMN_REGEX
+    params['deps_only'] = args.deps_only
+
+    vcs = VersionControlStamper(params)
+    err = goto_version(vcs, params, version)
+    del vcs
+
+    return err
+
+
+def _handle_stamp(args, params):
+    params['release_mode'] = args.release_mode
+    params['starting_version'] = args.starting_version
+    params['mode'] = args.mode
+    params['mode_suffix'] = args.mode_suffix
+    params['buildmetadata'] = args.build_metadata
+    vcs = VersionControlStamper(params)
+
+    if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
+        LOGGER.info('vmn tracking is not yet initialized')
+        return 1
+
+    err = _safety_validation(vcs)
+    if err:
+        return err
+
+    try:
+        version = get_version(vcs, args.pull, args.init_only)
+    except Exception as exc:
+        LOGGER.exception('Logged Exception message:')
+
+        return 1
+
+    LOGGER.info(version)
+    del vcs
+
+    return err
+
+
+def _handle_release(args, params):
+    params['release_mode'] = args.release_mode
+    vcs = VersionControlStamper(params)
+    version = args.version
+    err = _safety_validation(vcs)
+    if err:
+        return err
+
+    try:
+        version = vcs.release_app_version()
+    except Exception as exc:
+        LOGGER.exception('Logged Exception message:')
+
+        return 1
+
+    LOGGER.info(version)
+    del vcs
+
+    return err
+
+
+def _handle_show(LOGGER, args, params):
+    # root app does not have raw version number
+    if params['root']:
+        params['raw'] = False
+    else:
+        params['raw'] = args.raw
+    params['verbose'] = args.verbose
+    LOGGER.disabled = False
+    version = args.version
+    if version is not None and \
+            args.mode is not None and \
+            args.mode_version is not None:
+        version = f'{version}_{args.mode}-{args.mode_version}' \
+                  f'{args.mode_suffix}'
+    if version is not None and args.build_metadata is not None:
+        version = f'{version}+{args.build_metadata}'
+    # TODO: check version with VMN_REGEX
+    # TODO: handle cmd specific params differently
+    params['mode'] = args.mode
+    params['mode_suffix'] = args.mode_suffix
+    params['buildmetadata'] = args.build_metadata
+
+    vcs = VersionControlStamper(params)
+    err = show(vcs, params, version)
+
+    del vcs
+
+    return err
+
+
+def parse_user_commands(command_line):
     parser = argparse.ArgumentParser('vmn')
     parser.add_argument(
         '--version', '-v',
@@ -1475,13 +1606,11 @@ def main(command_line=None):
         action='store_true'
     )
     parser.set_defaults(debug=False)
-
     subprasers = parser.add_subparsers(dest='command')
     subprasers.add_parser(
         'init',
         help='initialize version tracking'
     )
-
     pshow = subprasers.add_parser(
         'show',
         help='show app version'
@@ -1507,7 +1636,6 @@ def main(command_line=None):
         '--raw', dest='raw', action='store_true'
     )
     pshow.set_defaults(raw=False)
-
     pstamp = subprasers.add_parser('stamp', help='stamp version')
     pstamp.add_argument(
         '-r', '--release-mode',
@@ -1540,7 +1668,6 @@ def main(command_line=None):
     pstamp.add_argument(
         'name', help="The application's name"
     )
-
     pgoto = subprasers.add_parser('goto', help='go to version')
     pgoto.add_argument(
         '-v', '--version',
@@ -1560,98 +1687,32 @@ def main(command_line=None):
         'name',
         help="The application's name"
     )
-
-    cwd = os.getcwd()
-    if 'VMN_WORKING_DIR' in os.environ:
-        cwd = os.environ['VMN_WORKING_DIR']
-
+    prelease = subprasers.add_parser(
+        'release',
+        help='release app version'
+    )
+    prelease.add_argument(
+        '-v', '--version',
+        required=True,
+        help="The version to show"
+    )
+    prelease.add_argument(
+        'name', help="The application's name"
+    )
+    padd = subprasers.add_parser(
+        'add',
+        help='add attributes to existing app version'
+    )
+    padd.add_argument(
+        '-v', '--version',
+        required=True,
+        help="The version to show"
+    )
+    padd.add_argument(
+        'name', help="The application's name"
+    )
     args = parser.parse_args(command_line)
-
-    global LOGGER
-    LOGGER = stamp_utils.init_stamp_logger(args.debug)
-    if args.command == 'show':
-        LOGGER.disabled = True
-
-    root = False
-    if 'root' in args:
-        root = args.root
-
-    if 'name' in args:
-        if args.name.startswith('/'):
-            raise RuntimeError(
-                'App name cannot start with {0}'.format('/')
-            )
-
-        if '-' in args.name:
-            raise RuntimeError(
-                'App name cannot contain {0}'.format('-')
-            )
-
-        params = build_world(args.name, cwd, root)
-    else:
-        params = build_world(None, cwd)
-
-    err = 0
-    if args.command == 'init':
-        err = init(params)
-    if args.command == 'show':
-        # root app does not have raw version number
-        if root:
-            params['raw'] = False
-        else:
-            params['raw'] = args.raw
-
-        params['verbose'] = args.verbose
-
-        LOGGER.disabled = False
-        version = args.version
-        if version is not None and \
-                args.mode is not None and \
-                args.mode_version is not None:
-            version = f'{version}_{args.mode}-{args.mode_version}' \
-                      f'{args.mode_suffix}'
-        if version is not None and args.build_metadata is not None:
-            version = f'{version}+{args.build_metadata}'
-
-        #TODO: check version with VMN_REGEX
-
-        # TODO: handle cmd specific params differently
-        params['mode'] = args.mode
-        params['mode_suffix'] = args.mode_suffix
-        params['buildmetadata'] = args.build_metadata
-        vcs = VersionControlStamper(params)
-        err = show(vcs, params, version)
-        del vcs
-    elif args.command == 'stamp':
-        params['release_mode'] = args.release_mode
-        params['starting_version'] = args.starting_version
-        params['mode'] = args.mode
-        params['mode_suffix'] = args.mode_suffix
-        params['buildmetadata'] = args.build_metadata
-        vcs = VersionControlStamper(params)
-        err = stamp(vcs, params, args.pull, args.init_only)
-        del vcs
-    elif args.command == 'goto':
-        params['mode'] = args.mode
-        params['mode_suffix'] = args.mode_suffix
-        params['buildmetadata'] = args.build_metadata
-        version = args.version
-        if version is not None and \
-                args.mode is not None and \
-                args.mode_version is not None:
-            version = f'{version}_{args.mode}-{args.mode_version}' \
-                      f'{args.mode_suffix}'
-        if version is not None and args.build_metadata is not None:
-                version = f'{version}+{args.build_metadata}'
-
-        # TODO: check version with VMN_REGEX
-
-        params['deps_only'] = args.deps_only
-        vcs = VersionControlStamper(params)
-        err = goto_version(vcs, params, version)
-        del vcs
-
-    return err
+    return args
 
 
 if __name__ == '__main__':

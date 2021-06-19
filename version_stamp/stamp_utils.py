@@ -25,12 +25,13 @@ VMN_REGEX = \
     '(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?' \
     '(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
 VMN_TAG_REGEX = \
-    '^(?P<app_name>.+)_(?P<major>0|[1-9]\d*)\.' \
+    '(?P<app_name>[^\/]+)_(?P<major>0|[1-9]\d*)\.' \
     '(?P<minor>0|[1-9]\d*)\.' \
     '(?P<patch>0|[1-9]\d*)' \
-    '(?:\D(?P<hotfix>0|[1-9]\d*))?' \
-    '(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?' \
-    '(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
+    '(?:\.(?P<hotfix>(?:0|[1-9]\d*))+)?' \
+    '(?:-(?P<prerelease>(?:pr\.[1-9]\d*))+)?' \
+    '(?:\+(?P<buildmetadata>(?:bm\.[1-9]\d*))+)?' \
+    '(?:-(?P<releasenotes>(?:rn\.[1-9]\d*))+)?$'
 
 VMN_USER_NAME = 'vmn'
 LOGGER = None
@@ -66,7 +67,7 @@ class VersionControlBackend(object):
     def __del__(self):
         pass
 
-    def tag(self, tags, user, force=False):
+    def tag(self, tags, user, message, force=False):
         raise NotImplementedError()
 
     def push(self, tags=()):
@@ -128,6 +129,15 @@ class VersionControlBackend(object):
 
     @staticmethod
     def get_tag_properties(tag_name, root=False):
+        ret_index = {
+            'app_name': 0,
+            'version': 1,
+            'hotfix': 2,
+            'prerelease': 3,
+            'buildmetadata': 4,
+            'releasenotes': 5,
+        }
+        ret = [None, None, None, None, None, None]
         if root:
             try:
                 groups = re.search(
@@ -136,14 +146,14 @@ class VersionControlBackend(object):
                 ).groups()
 
                 if len(groups) != 2:
-                    return None, None, None, None, None
+                    return tuple(ret)
             except:
-                return None, None, None, None, None
+                return tuple(ret)
 
-            app_name = groups[0].replace('-', '/')
-            version = groups[1]
+            ret[ret_index['app_name']] = groups[0].replace('-', '/')
+            ret[ret_index['version']] = groups[1]
 
-            return app_name, version, None, None, None
+            return tuple(ret)
 
         match = re.search(
             VMN_TAG_REGEX,
@@ -151,18 +161,26 @@ class VersionControlBackend(object):
         )
 
         if match is None:
-            return None, None, None, None, None
+            return tuple(ret)
 
         gdict = match.groupdict()
-        gdict['semver_version'] = f'{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}'
+        ret[ret_index['app_name']] = gdict['app_name'].replace('-', '/')
+        ret[ret_index['version']] = f'{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}'
+        ret[ret_index['hotfix']] = '0'
 
-        gdict['app_name'] = gdict['app_name'].replace('-', '/')
+        if gdict['hotfix'] is not None:
+            ret[ret_index['hotfix']] = gdict['hotfix']
 
-        return gdict['app_name'], \
-               gdict['semver_version'], \
-               gdict['hotfix'], \
-               gdict['prerelease'], \
-               gdict['buildmetadata']
+        if gdict['prerelease'] is not None:
+            ret[ret_index['prerelease']] = gdict['prerelease']
+
+        if gdict['buildmetadata'] is not None:
+            ret[ret_index['buildmetadata']] = gdict['buildmetadata']
+
+        if gdict['releasenotes'] is not None:
+                ret[ret_index['releasenotes']] = gdict['releasenotes']
+
+        return tuple(ret)
 
 
 class GitBackend(VersionControlBackend):
@@ -182,14 +200,14 @@ class GitBackend(VersionControlBackend):
     def __del__(self):
         self._be.close()
 
-    def tag(self, tags, user, force=False):
+    def tag(self, tags, user, message, force=False):
         for tag in tags:
             # This is required in order to preserver chronological order when
             # listing tags since the taggerdate field is in seconds resolution
             time.sleep(1.1)
             self._be.create_tag(
                 tag,
-                message='Automatic tag "{0}"'.format(tag),
+                message=message,
                 force=force
             )
 
@@ -458,7 +476,7 @@ class GitBackend(VersionControlBackend):
             formated_tag_name = VersionControlBackend.get_tag_name(
                 used_app_name
             )
-            for tag in self.tags(filter='{}_*'.format(formated_tag_name)):
+            for tag in self.tags(filter=(f'{formated_tag_name}_*')):
                 _app_name, version = VersionControlBackend.get_tag_properties(
                     tag, root=root
                 )
