@@ -32,6 +32,7 @@ VMN_TAG_REGEX = \
     '(?:-(?P<prerelease>(?:pr\.[1-9]\d*))+)?' \
     '(?:\+(?P<buildmetadata>(?:bm\.[1-9]\d*))+)?' \
     '(?:-(?P<releasenotes>(?:rn\.[1-9]\d*))+)?$'
+VMN_ROOT_TAG_REGEX = '(?P<app_name>[^\/]+)_(?P<version>0|[1-9]\d*)$'
 
 VMN_USER_NAME = 'vmn'
 LOGGER = None
@@ -128,59 +129,60 @@ class VersionControlBackend(object):
             return '{0}_{1}'.format(app_name, version)
 
     @staticmethod
-    def get_tag_properties(tag_name, root=False):
-        ret_index = {
-            'app_name': 0,
-            'version': 1,
-            'hotfix': 2,
-            'prerelease': 3,
-            'buildmetadata': 4,
-            'releasenotes': 5,
+    def get_tag_properties(tag_name):
+        ret = {
+            'app_name': None,
+            'type': 'version',
+            'version': None,
+            'hotfix': None,
+            'prerelease': None,
+            'buildmetadata': None,
+            'releasenotes': None,
         }
-        ret = [None, None, None, None, None, None]
-        if root:
-            try:
-                groups = re.search(
-                    r'(.+)_(\d+)$',
-                    tag_name
-                ).groups()
 
-                if len(groups) != 2:
-                    return tuple(ret)
-            except:
-                return tuple(ret)
+        match = re.search(
+            VMN_ROOT_TAG_REGEX,
+            tag_name
+        )
+        if match is not None:
+            gdict = match.groupdict()
+            if gdict['app_name'] is not None:
+                ret['app_name'] = gdict['app_name']
+            if gdict['version'] is not None:
+                int(gdict['version'])
+                ret['version'] = gdict['version']
 
-            ret[ret_index['app_name']] = groups[0].replace('-', '/')
-            ret[ret_index['version']] = groups[1]
-
-            return tuple(ret)
+            ret['type'] = 'root'
+            return tuple(ret.values())
 
         match = re.search(
             VMN_TAG_REGEX,
             tag_name
         )
-
         if match is None:
-            return tuple(ret)
+            return tuple(ret.values())
 
         gdict = match.groupdict()
-        ret[ret_index['app_name']] = gdict['app_name'].replace('-', '/')
-        ret[ret_index['version']] = f'{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}'
-        ret[ret_index['hotfix']] = '0'
+        ret['app_name'] = gdict['app_name'].replace('-', '/')
+        ret['version'] = f'{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}'
+        ret['hotfix'] = '0'
 
         if gdict['hotfix'] is not None:
-            ret[ret_index['hotfix']] = gdict['hotfix']
+            ret['hotfix'] = gdict['hotfix']
 
         if gdict['prerelease'] is not None:
-            ret[ret_index['prerelease']] = gdict['prerelease']
+            ret['prerelease'] = gdict['prerelease']
+            ret['type'] = 'rc'
 
         if gdict['buildmetadata'] is not None:
-            ret[ret_index['buildmetadata']] = gdict['buildmetadata']
+            ret['buildmetadata'] = gdict['buildmetadata']
+            ret['type'] = 'build'
 
         if gdict['releasenotes'] is not None:
-                ret[ret_index['releasenotes']] = gdict['releasenotes']
+            ret['releasenotes'] = gdict['releasenotes']
+            ret['type'] = 'releasenotes'
 
-        return tuple(ret)
+        return tuple(ret.values())
 
 
 class GitBackend(VersionControlBackend):

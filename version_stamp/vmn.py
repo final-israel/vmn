@@ -343,87 +343,112 @@ class IVersionsStamper(object):
             app_name=None,
             root_app_name=None
     ):
-        formated_tag_name = None
         if tag_name is None and app_name is None and root_app_name is None:
             return None
 
+        formated_tag_name = tag_name
         commit_tag_obj = None
+        version = None
+        prerelease = None
+        buildmetadata = None
+        releasenotes = None
         if tag_name is not None:
             try:
+                used_app_name, ver_type, version, hotfix, prerelease, buildmetadata, releasenotes = \
+                    stamp_utils.VersionControlBackend.get_tag_properties(tag_name)
+
+                version = f'{version}.{hotfix}'
+
                 commit_tag_obj = self.backend._be.commit(tag_name)
             except:
                 return None
         elif app_name is not None or root_app_name is not None:
             used_app_name = app_name
-            root = False
             if root_app_name is not None:
                 used_app_name = root_app_name
-                root = True
 
-            max_version = None
             formated_tag_name = stamp_utils.VersionControlBackend.get_tag_name(
                 used_app_name
             )
+            # TODO: improve (O(app tags)) to iter_commits as we always wish to give latest
+            # (timewise) stamp commit reachable from current branch
             tags = self.backend.tags(filter='{}_*'.format(formated_tag_name))
 
             for tag in tags:
-                _app_name, version, hotfix, prerelease, buildmetadata, releasenotes = \
-                    stamp_utils.VersionControlBackend.get_tag_properties(tag, root=root)
+                _app_name, _, version, hotfix, prerelease, _, _ = \
+                    stamp_utils.VersionControlBackend.get_tag_properties(tag)
+                # TODO: add warning here should not happen
                 if version is None:
                     continue
 
+                # TODO: add warning here should not happen
                 if _app_name != used_app_name:
                     continue
 
                 _commit_tag_obj = self.backend._be.commit(tag)
+                # TODO: add warning here should not happen
                 if _commit_tag_obj.author.name != stamp_utils.VMN_USER_NAME:
                     continue
 
-                if max_version is None:
-                    max_version = version
-                    tag_name = tag
-                    commit_tag_obj = _commit_tag_obj
-                elif pversion.parse(max_version) < pversion.parse(version):
-                    max_version = version
-                    tag_name = tag
-                    commit_tag_obj = _commit_tag_obj
+                version = f'{version}.{hotfix}'
+                tag_name = tag
+                commit_tag_obj = _commit_tag_obj
 
         if commit_tag_obj is None:
             return None
 
-        if commit_tag_obj.author.name != stamp_utils.VMN_USER_NAME:
-            return None
+        all_tags = {}
 
-        # TODO:: Check API commit version
+        found = False
+        # TODO: improve to iter_commits
+        tags = self.backend.tags(filter='{}*'.format(formated_tag_name))
+        for tag in tags:
+            if found and commit_tag_obj.hexsha != self.backend._be.commit(tag_name).hexsha:
+                break
+            if commit_tag_obj.hexsha != self.backend._be.commit(tag_name).hexsha:
+                continue
 
-        commit_msg = yaml.safe_load(
-            self.backend._be.commit(tag_name).message
-        )
+            found = True
 
-        if commit_msg is None or 'stamping' not in commit_msg:
-            # TODO: raise error here?
-            return None
+            tagd = {'tag': tag}
 
-        commit_msg['stamping']['app']['orig_current_mode'] = \
-            commit_msg['stamping']['app']['current_mode']
-        commit_msg['stamping']['app']['orig_current_mode_suffix'] = \
-            commit_msg['stamping']['app']['current_mode_suffix']
+            tagd['app_name'], \
+            tagd['type'],\
+            tagd['version'],\
+            tagd['hotfix'], \
+            tagd['prerelease'],\
+            tagd['buildmetadata'],\
+            tagd['releasenotes'] = \
+                stamp_utils.VersionControlBackend.get_tag_properties(tag)
+            tagd['message'] = \
+                self.backend._be.tag(f'refs/tags/{tag}').object.message
 
-        tmp_ver = tag_name.replace(
-            '{0}_'.format(commit_msg['stamping']['app']['name']),
-            ''
-        )
-        if commit_msg['stamping']['app']['_version'].startswith(tmp_ver) and \
-           commit_msg['stamping']['app']['_version'] != tmp_ver:
-           prev_ver = commit_msg['stamping']['app']['_version']
-           commit_msg['stamping']['app']['_version'] = tmp_ver
-           commit_msg['stamping']['app']['current_mode'] = 'release'
-           commit_msg['stamping']['app']['current_mode_suffix'] = ''
-           commit_msg['stamping']['app']['previous_version'] = prev_ver
-           commit_msg['stamping']['app']['version'] = \
-               self.get_formatted_version(tmp_ver)
+            all_tags[tagd['type']] = tagd
 
-        return commit_msg
+            # TODO:: Check API commit version
+
+        if 'version' not in all_tags:
+            all_tags['version'] = all_tags['rc']
+
+        version_info = yaml.safe_load(all_tags['version']['message'])
+        if 'root' in all_tags:
+            version_info.update(
+                yaml.safe_load(all_tags['root']['message'])
+            )
+
+        version_info['stamping']['app']['orig_current_mode'] = \
+            version_info['stamping']['app']['current_mode']
+        version_info['stamping']['app']['orig_current_mode_suffix'] = \
+            version_info['stamping']['app']['current_mode_suffix']
+
+        if 'rc' in all_tags:
+           version_info['stamping']['app']['_version'] = version
+           version_info['stamping']['app']['current_mode'] = 'release'
+           version_info['stamping']['app']['current_mode_suffix'] = ''
+           version_info['stamping']['app']['version'] = \
+               self.get_formatted_version(version)
+
+        return version_info
 
     @staticmethod
     def write_version_to_file(file_path: str, version_number: str) -> None:
@@ -971,10 +996,13 @@ def show(vcs, params, version=None):
     return 0
 
 
-def _safety_validation(versions_be_ifc):
+def _safety_validation(
+        versions_be_ifc,
+        allow_detached_head=False):
     be = versions_be_ifc.backend
 
     err = be.check_for_git_user_config()
+    # TODO: verify err from same type across all functions
     if err:
         LOGGER.info('{0}. Exiting'.format(err))
         return err
@@ -984,11 +1012,17 @@ def _safety_validation(versions_be_ifc):
         LOGGER.info('{0}. Exiting'.format(err))
         return err
 
-    if not be.in_detached_head():
-        err = be.check_for_outgoing_changes()
-        if err:
-            LOGGER.info('{0}. Exiting'.format(err))
+    if allow_detached_head:
+        if be.in_detached_head():
             return err
+
+    # TODO: think again about outgoing changes in detached head
+    err = be.check_for_outgoing_changes()
+    if err:
+        LOGGER.info('{0}. Exiting'.format(err))
+        return err
+
+    return err
 
 
 def get_version(versions_be_ifc, pull, init_only):
@@ -1070,7 +1104,7 @@ def goto_version(vcs, params, version):
         LOGGER.info('vmn tracking is not yet initialized')
         return 1
 
-    err = _safety_validation(vcs)
+    err = _safety_validation(vcs, allow_detached_head=True)
     if err:
         return err
 
@@ -1546,7 +1580,7 @@ def _handle_release(args, params):
     params['release_mode'] = args.release_mode
     vcs = VersionControlStamper(params)
     version = args.version
-    err = _safety_validation(vcs)
+    err = _safety_validation(vcs, allow_detached_head=True)
     if err:
         return err
 
@@ -1581,13 +1615,18 @@ def _handle_show(LOGGER, args, params):
         version = f'{version}+{args.build_metadata}'
     # TODO: check version with VMN_REGEX
     # TODO: handle cmd specific params differently
-    params['mode'] = args.mode
-    params['mode_suffix'] = args.mode_suffix
-    params['buildmetadata'] = args.build_metadata
+    # all this should be vmn internal to semver pr1 bm4 params
+    #params['mode'] = args.mode
+    #params['mode_suffix'] = args.mode_suffix
+    #params['buildmetadata'] = args.build_metadata
 
     vcs = VersionControlStamper(params)
-    err = show(vcs, params, version)
+    err = _safety_validation(vcs, allow_detached_head=True)
+    if err:
+        del vcs
+        return err
 
+    err = show(vcs, params, version)
     del vcs
 
     return err
@@ -1624,10 +1663,10 @@ def parse_user_commands(command_line):
         required=False,
         help="The version to show"
     )
-    pshow.add_argument('-m', '--mode')
-    pshow.add_argument('-mv', '--mode_version', default=None)
-    pshow.add_argument('-ms', '--mode_suffix', default='')
-    pshow.add_argument('-bm', '--build_metadata', default=None)
+    pshow.add_argument('--pr', '--prerelease')
+    pshow.add_argument('--mv', '--mode_version', default=None)
+    pshow.add_argument('--ms', '--mode_suffix', default='')
+    pshow.add_argument('--bm', '--buildmetadata', default=None)
     pshow.add_argument('--root', dest='root', action='store_true')
     pshow.set_defaults(root=False)
     pshow.add_argument('--verbose', dest='verbose', action='store_true')
@@ -1644,17 +1683,17 @@ def parse_user_commands(command_line):
         help='major / minor / patch / hotfix'
     )
     pstamp.add_argument(
-        '-m', '--mode',
+        '--pr', '--prerelease',
         default=None,
         help='Version mode. Can be anything really until you decide '
              'to set the mode to be release again'
     )
     pstamp.add_argument(
-        '-ms', '--mode-suffix',
+        '--ms', '--mode-suffix',
         default='',
         help='Version mode suffix. Can be anything'
     )
-    pstamp.add_argument('-bm', '--build_metadata', default=None)
+    pstamp.add_argument('--bm', '--buildmetadata', default=None)
     pstamp.add_argument(
         '-s', '--starting-version',
         default='0.0.0',
@@ -1663,7 +1702,7 @@ def parse_user_commands(command_line):
     )
     pstamp.add_argument('--pull', dest='pull', action='store_true')
     pstamp.set_defaults(pull=False)
-    pstamp.add_argument('--init_only', dest='init_only', action='store_true')
+    pstamp.add_argument('--init-only', dest='init_only', action='store_true')
     pstamp.set_defaults(init_only=False)
     pstamp.add_argument(
         'name', help="The application's name"
@@ -1675,10 +1714,10 @@ def parse_user_commands(command_line):
         required=False,
         help="The version to go to"
     )
-    pgoto.add_argument('-m', '--mode')
-    pgoto.add_argument('-mv', '--mode_version', default=None)
-    pgoto.add_argument('-ms', '--mode_suffix', default='')
-    pgoto.add_argument('-bm', '--build_metadata', default='')
+    pgoto.add_argument('--pr', '--prerelease')
+    pgoto.add_argument('--prv', '--prerelease-version', default=None)
+    pgoto.add_argument('--ms', '--prerelease-suffix', default='')
+    pgoto.add_argument('--bm', '--build-metadata', default='')
     pgoto.add_argument('--root', dest='root', action='store_true')
     pgoto.set_defaults(root=False)
     pgoto.add_argument('--deps-only', dest='deps_only', action='store_true')
@@ -1712,6 +1751,7 @@ def parse_user_commands(command_line):
         'name', help="The application's name"
     )
     args = parser.parse_args(command_line)
+
     return args
 
 
