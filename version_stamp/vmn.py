@@ -299,7 +299,7 @@ class IVersionsStamper(object):
 
         vmn_version = f'{major}.{minor}.{patch}'
         if hotfix is not None:
-            vmn_version = f'{vmn_version}_{hotfix}'
+            vmn_version = f'{vmn_version}.{hotfix}'
         if prerelease is not None:
             vmn_version = f'{vmn_version}-{prerelease}'
         if buildmetadata is not None:
@@ -357,7 +357,9 @@ class IVersionsStamper(object):
                 used_app_name, ver_type, version, hotfix, prerelease, buildmetadata, releasenotes = \
                     stamp_utils.VersionControlBackend.get_tag_properties(tag_name)
 
-                version = f'{version}.{hotfix}'
+                # refactor hotfix check logic
+                if hotfix != '0':
+                    version = f'{version}.{hotfix}'
 
                 commit_tag_obj = self.backend._be.commit(tag_name)
             except:
@@ -372,7 +374,7 @@ class IVersionsStamper(object):
             )
             # TODO: improve (O(app tags)) to iter_commits as we always wish to give latest
             # (timewise) stamp commit reachable from current branch
-            tags = self.backend.tags(filter='{}_*'.format(formated_tag_name))
+            tags = self.backend.tags(filter=f'{formated_tag_name}_*')
 
             for tag in tags:
                 _app_name, _, version, hotfix, prerelease, _, _ = \
@@ -390,7 +392,8 @@ class IVersionsStamper(object):
                 if _commit_tag_obj.author.name != stamp_utils.VMN_USER_NAME:
                     continue
 
-                version = f'{version}.{hotfix}'
+                if hotfix != '0':
+                    version = f'{version}.{hotfix}'
                 tag_name = tag
                 commit_tag_obj = _commit_tag_obj
 
@@ -401,7 +404,7 @@ class IVersionsStamper(object):
 
         found = False
         # TODO: improve to iter_commits
-        tags = self.backend.tags(filter='{}*'.format(formated_tag_name))
+        tags = self.backend.tags(filter=f'{formated_tag_name}*')
         for tag in tags:
             if found and commit_tag_obj.hexsha != self.backend._be.commit(tag_name).hexsha:
                 break
@@ -562,13 +565,7 @@ class VersionControlStamper(IVersionsStamper):
 
         # Try to find any version of the application matching the
         # user's repositories local state
-        for tag in self.backend.tags():
-            if not re.match(
-                r'{}_(\d+\.\d+\.\d+)_?(.+[0-9]+)*$'.format(app_tag_name),
-                tag
-            ):
-                continue
-
+        for tag in self.backend.tags(filter=f'{app_tag_name}_*'):
             ver_info = self.get_vmn_version_info(tag_name=tag)
             if ver_info is None:
                 continue
@@ -591,9 +588,7 @@ class VersionControlStamper(IVersionsStamper):
                     found = False
                     break
 
-            if found and self._mode == 'release' and ver_info['stamping']['app']['current_mode'] != 'release':
-                return None
-            elif found:
+            if found:
                 return ver_info['stamping']['app']['_version']
 
         return None
@@ -610,7 +605,7 @@ class VersionControlStamper(IVersionsStamper):
             LOGGER.debug('{}'.format(e))
             return None
 
-    def decide_app_version_by_source(self) -> str:
+    def decide_on_starting_version(self) -> str:
         only_initialized = self.tracked and \
             self.ver_info_form_repo['stamping']['app']['_version'] == '0.0.0'
 
@@ -629,7 +624,7 @@ class VersionControlStamper(IVersionsStamper):
         if not self._buildmetadata:
             raise RuntimeError("TODO xxx")
 
-        old_version = self.decide_app_version_by_source()
+        old_version = self.decide_on_starting_version()
 
         self._should_publish = False
         tag_name = stamp_utils.VersionControlBackend.get_tag_name(
@@ -642,13 +637,13 @@ class VersionControlStamper(IVersionsStamper):
                 'like to release.'
             )
 
-        _, version, hotfix, prerelease, _ = \
+        _, _, version, hotfix, prerelease, _, _ = \
             stamp_utils.VersionControlBackend.get_tag_properties(
                 tag_name
             )
 
-        if hotfix is not None:
-            version = f'{version}_{hotfix}'
+        if hotfix != '0':
+            version = f'{version}.{hotfix}'
         if prerelease is not None:
             version = f'{version}-{prerelease}'
 
@@ -662,16 +657,25 @@ class VersionControlStamper(IVersionsStamper):
 
         return version
 
-    def release_app_version(self):
+    def release_app_version(self, version):
         if not self._releasing_rc:
             raise RuntimeError("No prerelease version to release")
 
-        old_version = self.decide_app_version_by_source()
-
         self._should_publish = False
         tag_name = stamp_utils.VersionControlBackend.get_tag_name(
-            self._name, old_version
+            self._name, version
         )
+        match = re.search(
+            stamp_utils.VMN_TAG_REGEX,
+            tag_name
+        )
+        if match is None:
+            raise RuntimeError("Wrong version format specified")
+
+        gdict = match.groupdict()
+        if 'prerelease' not in gdict:
+            raise RuntimeError("Wrong version format specified. Can release only rc versions")
+
         if self.backend.changeset() != self.backend.changeset(tag=tag_name):
             raise RuntimeError(
                 'Releasing a release candidate is only possible when the repository '
@@ -679,13 +683,13 @@ class VersionControlStamper(IVersionsStamper):
                 'like to release.'
             )
 
-        _, version, hotfix, _, _ = \
+        _, _, version, hotfix, _, _, _ = \
             stamp_utils.VersionControlBackend.get_tag_properties(
                 tag_name
             )
 
-        if hotfix is not None:
-            version = f'{version}_{hotfix}'
+        if hotfix != '0':
+            version = f'{version}.{hotfix}'
 
         tag_name = stamp_utils.VersionControlBackend.get_tag_name(
             self._name, version
@@ -699,7 +703,7 @@ class VersionControlStamper(IVersionsStamper):
             self,
             override_current_version=None,
     ):
-        old_version = self.decide_app_version_by_source()
+        old_version = self.decide_on_starting_version()
 
         matched_version = self.find_matching_version()
         if matched_version == '0.0.0':
@@ -1490,7 +1494,8 @@ def main(command_line=None):
         initial_params['root']
     )
 
-    lock_file_path = os.path.join(params['root_path'], 'vmn.lock')
+    vmn_path = os.path.join(params['root_path'], '.vmn')
+    lock_file_path = os.path.join(vmn_path, 'vmn.lock')
     pathlib.Path(os.path.dirname(lock_file_path)).mkdir(
         parents=True, exist_ok=True
     )
@@ -1550,9 +1555,6 @@ def _handle_goto(args, params):
 def _handle_stamp(args, params):
     params['release_mode'] = args.release_mode
     params['starting_version'] = args.starting_version
-    params['mode'] = args.mode
-    params['mode_suffix'] = args.mode_suffix
-    params['buildmetadata'] = args.build_metadata
     vcs = VersionControlStamper(params)
 
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
@@ -1577,9 +1579,34 @@ def _handle_stamp(args, params):
 
 
 def _handle_release(args, params):
-    params['release_mode'] = args.release_mode
-    vcs = VersionControlStamper(params)
+    params['mode'] = args.prerelease
+    params['mode_suffix'] = args.prerelease_suffix
     version = args.version
+
+    vcs = VersionControlStamper(params)
+    err = _safety_validation(vcs, allow_detached_head=True)
+    if err:
+        return err
+
+    try:
+        version = vcs.release_app_version(version)
+    except Exception as exc:
+        LOGGER.exception('Logged Exception message:')
+
+        return 1
+
+    LOGGER.info(version)
+    del vcs
+
+    return err
+
+
+def _handle_add(args, params):
+    params['buildmetadata'] = args.build_metadata
+    params['releasenotes'] = args.releasenotes
+    version = args.version
+
+    vcs = VersionControlStamper(params)
     err = _safety_validation(vcs, allow_detached_head=True)
     if err:
         return err
@@ -1595,6 +1622,7 @@ def _handle_release(args, params):
     del vcs
 
     return err
+
 
 
 def _handle_show(LOGGER, args, params):
@@ -1629,6 +1657,7 @@ def _handle_show(LOGGER, args, params):
     err = show(vcs, params, version)
     del vcs
 
+    LOGGER.disabled = True
     return err
 
 
@@ -1733,7 +1762,17 @@ def parse_user_commands(command_line):
     prelease.add_argument(
         '-v', '--version',
         required=True,
-        help="The version to show"
+        help="The version to release"
+    )
+    prelease.add_argument(
+        '--pr', '--prerelease',
+        default=None,
+        help="The version to release"
+    )
+    prelease.add_argument(
+        '--prs', '--prerelease-suffix',
+        default='',
+        help="The version to release"
     )
     prelease.add_argument(
         'name', help="The application's name"
@@ -1745,6 +1784,16 @@ def parse_user_commands(command_line):
     padd.add_argument(
         '-v', '--version',
         required=True,
+        help="The version to show"
+    )
+    padd.add_argument(
+        '--bm', '--buildmetadata',
+        default=None,
+        help="The version to show"
+    )
+    padd.add_argument(
+        '--rn', '--releasenotes',
+        default=None,
         help="The version to show"
     )
     padd.add_argument(

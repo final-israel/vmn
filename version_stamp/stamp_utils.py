@@ -290,7 +290,11 @@ class GitBackend(VersionControlBackend):
             *cmd
         ).split('\n')
 
-        return tags[::-1]
+        tags = tags[::-1]
+        if len(tags) == 1 and tags[0] == '':
+            tags.pop(0)
+
+        return tags
 
     def in_detached_head(self):
         return self._be.head.is_detached
