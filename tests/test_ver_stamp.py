@@ -420,7 +420,7 @@ def test_version_template(app_layout):
         prerelease_template,
         buildmetadata_template,
     )
-    formated_version = vcs.get_formatted_version('1.3.0')
+    formated_version = vcs.get_utemplate_formatted_version('1.3.0')
     assert data['version'] == formated_version
 
     semver_template = 'ap{major}xx{major}XX{minor}AC@{major}{patch}C'
@@ -438,7 +438,7 @@ def test_version_template(app_layout):
         buildmetadata_template,
     )
 
-    formated_version = vcs.get_formatted_version('2.0.9')
+    formated_version = vcs.get_utemplate_formatted_version('2.0.9')
     assert formated_version == 'ap2xxXX0AC@9C'
 
     app_layout.write_file_commit_and_push(
@@ -517,7 +517,7 @@ def test_version_template(app_layout):
         prerelease_template,
         buildmetadata_template,
     )
-    formated_version = vcs.get_formatted_version('2.0.9-alpha.3')
+    formated_version = vcs.get_utemplate_formatted_version('2.0.9-alpha.3')
     assert formated_version == 'ap2xx0XX9AC@ABCalpha.3'
 
 

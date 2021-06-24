@@ -6,10 +6,15 @@ import logging
 from pathlib import Path
 import re
 import time
+
+import yaml
 from packaging import version as pversion
 import configparser
 
 INIT_COMMIT_MESSAGE = 'Initialized vmn tracking'
+
+VMN_VERSION_FORMAT = \
+    "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}][+{buildmetadata}][-rn{releasenotesid}]"
 
 SEMVER_REGEX = \
     '^(?P<major>0|[1-9]\d*)\.' \
@@ -120,7 +125,7 @@ class VersionControlBackend(object):
         return self._type
 
     @staticmethod
-    def get_tag_name(app_name, version=None):
+    def get_tag_formatted_app_name(app_name, version=None):
         app_name = app_name.replace('/', '-')
 
         if version is None:
@@ -129,11 +134,12 @@ class VersionControlBackend(object):
             return '{0}_{1}'.format(app_name, version)
 
     @staticmethod
-    def get_tag_properties(tag_name):
+    def get_tag_properties(vmn_tag):
         ret = {
             'app_name': None,
             'type': 'version',
             'version': None,
+            'root_version': None,
             'hotfix': None,
             'prerelease': None,
             'buildmetadata': None,
@@ -142,25 +148,25 @@ class VersionControlBackend(object):
 
         match = re.search(
             VMN_ROOT_TAG_REGEX,
-            tag_name
+            vmn_tag
         )
         if match is not None:
             gdict = match.groupdict()
-            if gdict['app_name'] is not None:
-                ret['app_name'] = gdict['app_name']
             if gdict['version'] is not None:
                 int(gdict['version'])
-                ret['version'] = gdict['version']
+                ret['root_version'] = gdict['version']
+                ret['type'] = 'root'
 
-            ret['type'] = 'root'
-            return tuple(ret.values())
+            return ret
 
         match = re.search(
             VMN_TAG_REGEX,
-            tag_name
+            vmn_tag
         )
         if match is None:
-            return tuple(ret.values())
+            raise RuntimeError(
+                f"Tag {vmn_tag} doesn't comply to vmn version format"
+            )
 
         gdict = match.groupdict()
         ret['app_name'] = gdict['app_name'].replace('-', '/')
@@ -172,17 +178,36 @@ class VersionControlBackend(object):
 
         if gdict['prerelease'] is not None:
             ret['prerelease'] = gdict['prerelease']
-            ret['type'] = 'rc'
+            ret['type'] = 'prerelease'
 
         if gdict['buildmetadata'] is not None:
             ret['buildmetadata'] = gdict['buildmetadata']
-            ret['type'] = 'build'
+            ret['type'] = 'buildmetadata'
 
         if gdict['releasenotes'] is not None:
             ret['releasenotes'] = gdict['releasenotes']
             ret['type'] = 'releasenotes'
 
-        return tuple(ret.values())
+        return ret
+
+    @staticmethod
+    def get_utemplate_formatted_version(raw_vmn_version, template):
+        match = re.search(
+            VMN_REGEX,
+            raw_vmn_version
+        )
+
+        gdict = match.groupdict()
+        if gdict['hotfix'] == '0':
+            gdict['hotfix'] = None
+
+        formatted_version = template.format(
+            major=gdict['major'],
+            minor=gdict['minor'],
+            patch=gdict['patch']
+        )
+
+        return formatted_version
 
 
 class GitBackend(VersionControlBackend):
@@ -456,72 +481,69 @@ class GitBackend(VersionControlBackend):
                 'Failed to fetch tags'
             )
 
-    def get_vmn_version_info(
-            self,
-            tag_name=None,
-            app_name=None,
-            root_app_name=None
-    ):
-        if tag_name is None and app_name is None and root_app_name is None:
+    def get_vmn_version_info(self, app_name):
+        formated_tag_name = VersionControlBackend.get_tag_formatted_app_name(
+            app_name
+        )
+        app_tags = self.tags(filter=(f'{formated_tag_name}_*'))
+
+        if not app_tags:
             return None
 
-        commit_tag_obj = None
-        if tag_name is not None:
-            try:
-                commit_tag_obj = self._be.commit(tag_name)
-            except:
-                return None
-        elif app_name is not None or root_app_name is not None:
-            used_app_name = app_name
-            root = False
-            if root_app_name is not None:
-                used_app_name = root_app_name
-                root = True
+        return self.get_vmn_tag_version_info(app_tags[0])
 
-            max_version = None
-            formated_tag_name = VersionControlBackend.get_tag_name(
-                used_app_name
-            )
-            for tag in self.tags(filter=(f'{formated_tag_name}_*')):
-                _app_name, version = VersionControlBackend.get_tag_properties(
-                    tag, root=root
-                )
-                if version is None:
-                    continue
-
-                if _app_name != used_app_name:
-                    continue
-
-                _commit_tag_obj = self._be.commit(tag)
-                if _commit_tag_obj.author.name != VMN_USER_NAME:
-                    continue
-
-                if max_version is None:
-                    max_version = version
-                    tag_name = tag
-                    commit_tag_obj = _commit_tag_obj
-                elif pversion.parse(max_version) < pversion.parse(version):
-                    max_version = version
-                    tag_name = tag
-                    commit_tag_obj = _commit_tag_obj
+    def get_vmn_tag_version_info(self, tag_name):
+        commit_tag_obj = self._be.commit(tag_name)
+        if commit_tag_obj.author.name != VMN_USER_NAME:
+            raise RuntimeError(f'Corrupted tag {tag_name}: author name is not vmn')
 
         if commit_tag_obj is None:
             return None
 
-        if commit_tag_obj.author.name != VMN_USER_NAME:
-            return None
-
         # TODO:: Check API commit version
+        # TODO: check if newer vmn has stamped here
+
+        tag = self._be.commit(tag_name)
 
         # safe_load discards any text before the YAML document (if present)
         commit_msg = yaml.safe_load(
-            self._be.commit(tag_name).message
+            tag.message
         )
-
         if commit_msg is None or 'stamping' not in commit_msg:
-            return None
+            raise RuntimeError(f'Corrupted tag msg of tag {tag_name}')
 
-        return commit_msg
+        all_tags = {}
+        found = False
+        # TODO: improve to iter_commits
+        tags = self.tags(filter=f'{tag_name}*')
+        for tag in tags:
+            if found and commit_tag_obj.hexsha != self._be.commit(tag_name).hexsha:
+                break
+            if commit_tag_obj.hexsha != self._be.commit(tag_name).hexsha:
+                continue
+
+            found = True
+
+            tagd = VersionControlBackend.get_tag_properties(tag)
+            tagd.update({'tag': tag})
+            tagd['message'] = \
+                self._be.tag(f'refs/tags/{tag}').object.message
+
+            all_tags[tagd['type']] = tagd
+
+            # TODO:: Check API commit version
+
+        if 'version' not in all_tags:
+            version_info = yaml.safe_load(all_tags['prerelease']['message'])
+        else:
+            version_info = yaml.safe_load(all_tags['version']['message'])
+
+        if 'root' in all_tags:
+            version_info.update(
+                yaml.safe_load(all_tags['root']['message'])
+            )
+
+        return version_info
 
     @staticmethod
     def clone(path, remote):

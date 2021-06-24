@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import argparse
+import random
+import time
 from pathlib import Path
 import copy
 import yaml
@@ -30,9 +32,8 @@ class IVersionsStamper(object):
         self._release_mode = conf['release_mode']
         self._app_dir_path = conf['app_dir_path']
         self._app_conf_path = conf['app_conf_path']
-        self._starting_version = conf['starting_version']
-        self._mode = conf['mode']
-        self._mode_suffix = conf['mode_suffix']
+        self._prerelease = conf['mode']
+        self._prerelease_suffix = conf['mode_suffix']
         self._buildmetadata = conf['buildmetadata']
         self._repo_name = '.'
 
@@ -43,40 +44,28 @@ class IVersionsStamper(object):
         self._version_file_path = '{}/{}'.format(
             self._app_dir_path, VER_FILE_NAME)
 
-        self._version_template, \
-        self._semver_template, \
-        self._hotfix_template, \
-        self._prerelease_template, \
-        self._buildmetadata_template = IVersionsStamper.parse_template(
-            conf['semver_template'],
-            conf['hotfix_template'],
-            conf['prerelease_template'],
-            conf['buildmetadata_template']
-        )
+        self.template = \
+            IVersionsStamper.parse_template(conf['template'])
 
         self._raw_configured_deps = conf['raw_configured_deps']
         self.actual_deps_state = conf["actual_deps_state"]
         self._flat_configured_deps = self.get_deps_changesets()
-        self._mode_count = {}
-        self._current_mode = 'release'
-        self._current_mode_suffix = ''
+        self._prerelease_version_ids = {}
+        self._previous_version_prerelease_mode = 'release'
+        self._previous_version_prerelease_mode_suffix = ''
         self._hide_zero_hotfix = True
 
         self.ver_info_form_repo = \
-            self.get_vmn_version_info(
-                app_name=self._name
-            )
+            self.backend.get_vmn_version_info(self._name)
         self.tracked = self.ver_info_form_repo is not None
         if self.tracked:
-            self._mode_count = self.ver_info_form_repo['stamping']['app']["mode_count"]
-            self._current_mode = self.ver_info_form_repo['stamping']['app']["orig_current_mode"]
-            self._current_mode_suffix = self.ver_info_form_repo['stamping']['app']["orig_current_mode_suffix"]
+            self._prerelease_version_ids = \
+                self.ver_info_form_repo['stamping']['app']["mode_count"]
+            self._previous_version_prerelease_mode = \
+                self.ver_info_form_repo['stamping']['app']["orig_current_mode"]
+            self._previous_version_prerelease_mode_suffix = \
+                self.ver_info_form_repo['stamping']['app']["orig_current_mode_suffix"]
 
-        self._releasing_rc = (
-                self._current_mode != 'release' and
-                self._release_mode is None and
-                self._mode == 'release'
-        )
         self._should_publish = True
 
         self._version_info_message = {
@@ -89,7 +78,8 @@ class IVersionsStamper(object):
                 'app': {
                     'name': self._name,
                     'changesets': self.actual_deps_state,
-                    'version': self.get_formatted_version('0.0.0'),
+                    'version': stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
+                        '0.0.0', self.template),
                     '_version': '0.0.0',
                     'release_mode': self._release_mode,
                     "previous_version": '0.0.0',
@@ -109,10 +99,7 @@ class IVersionsStamper(object):
         if self._root_app_name is not None:
             self._version_info_message['stamping']['root_app'] = {
                 'name': self._root_app_name,
-                'version': 0,
                 'latest_service': self._name,
-                'services': {self._name: '0.0.0'},
-                'external_services': {},
             }
 
     def __del__(self):
@@ -129,42 +116,42 @@ class IVersionsStamper(object):
         minor = gdict['minor']
         patch = gdict['patch']
         hotfix = gdict['hotfix']
-        mode = self._mode
-        mode_count = self._mode_count
-        mode_suffix = self._mode_suffix
+        prerelease = self._prerelease
+        prerelease_version_ids = self._prerelease_version_ids
+        prerelease_suffix = self._prerelease_suffix
 
-        # If user did not specify a change in mode,
+        # If user did not specify a change in prerelease,
         # stay with the previous one
-        if mode is None:
-            mode = self._current_mode
-            mode_suffix = self._current_mode_suffix
+        if prerelease is None:
+            prerelease = self._previous_version_prerelease_mode
+            prerelease_suffix = self._previous_version_prerelease_mode_suffix
 
-        counter_key = mode + mode_suffix
+        counter_key = prerelease + prerelease_suffix
 
-        if self._current_mode != 'release' and self._release_mode is None:
-            if counter_key not in mode_count:
-                mode_count[counter_key] = 0
-            mode_count[counter_key] += 1
+        if self._previous_version_prerelease_mode != 'release' and self._release_mode is None:
+            if counter_key not in prerelease_version_ids:
+                prerelease_version_ids[counter_key] = 0
+            prerelease_version_ids[counter_key] += 1
 
-            self._version_info_message['stamping']['app']['mode_count'] = mode_count
-            self._version_info_message['stamping']['app']['current_mode'] = mode
-            self._version_info_message['stamping']['app']['current_mode_suffix'] = mode_suffix
-        elif self._current_mode != 'release' and self._release_mode is not None and mode != 'release':
-            mode_count = {
+            self._version_info_message['stamping']['app']['prerelease_version_ids'] = prerelease_version_ids
+            self._version_info_message['stamping']['app']['current_mode'] = prerelease
+            self._version_info_message['stamping']['app']['current_mode_suffix'] = prerelease_suffix
+        elif self._previous_version_prerelease_mode != 'release' and self._release_mode is not None and prerelease != 'release':
+            prerelease_version_ids = {
                 counter_key: 1
             }
 
-            self._version_info_message['stamping']['app']['mode_count'] = mode_count
-            self._version_info_message['stamping']['app']['current_mode'] = mode
-            self._version_info_message['stamping']['app']['current_mode_suffix'] = mode_suffix
-        elif self._current_mode == 'release' and mode != 'release':
-            mode_count = {
+            self._version_info_message['stamping']['app']['prerelease_version_ids'] = prerelease_version_ids
+            self._version_info_message['stamping']['app']['current_mode'] = prerelease
+            self._version_info_message['stamping']['app']['current_mode_suffix'] = prerelease_suffix
+        elif self._previous_version_prerelease_mode == 'release' and prerelease != 'release':
+            prerelease_version_ids = {
                 counter_key: 1
             }
 
-            self._version_info_message['stamping']['app']['mode_count'] = mode_count
-            self._version_info_message['stamping']['app']['current_mode'] = mode
-            self._version_info_message['stamping']['app']['current_mode_suffix'] = mode_suffix
+            self._version_info_message['stamping']['app']['prerelease_version_ids'] = prerelease_version_ids
+            self._version_info_message['stamping']['app']['current_mode'] = prerelease
+            self._version_info_message['stamping']['app']['current_mode_suffix'] = prerelease_suffix
 
         if self._release_mode == 'major':
             major = str(int(major) + 1)
@@ -182,113 +169,14 @@ class IVersionsStamper(object):
             hotfix = str(int(hotfix) + 1)
 
         # TODO: ugly
-        copy_mode_count = copy.deepcopy(mode_count)
+        copy_mode_count = copy.deepcopy(prerelease_version_ids)
         copy_mode_count['release'] = 0
         verstr = self.gen_vmn_version(major, minor, patch,
                                       gdict['hotfix'],
-                                      mode + str(copy_mode_count[counter_key]) + mode_suffix,
+                                      prerelease + str(copy_mode_count[counter_key]) + prerelease_suffix,
                                       self._buildmetadata)
 
         return verstr
-
-    @staticmethod
-    def parse_template(semver_template, hotfix_template, prerelease_template, buildmetadata_template):
-        placeholders = (
-            '{major}', '{minor}', '{patch}', '{hotfix}',
-            '{prerelease}', '{buildmetadata}'
-        )
-
-        # TODO: refactor here
-        tmp_formats = set(re.findall(r'({.+?})', semver_template))
-        semver_formats = set(placeholders[:3])
-        try:
-            assert len(tmp_formats) == 3
-            assert len(tmp_formats & semver_formats) == 3
-        except:
-            raise RuntimeError(
-                'Invalid semver_template must include all'
-                '{major}{minor}{patch} formats and only them'
-            )
-
-        tmp_formats = set(re.findall('({.+?})', hotfix_template))
-        hotfix_formats = set(placeholders[3:4])
-        try:
-            assert len(tmp_formats) == 1
-            assert len(tmp_formats & hotfix_formats) == 1
-        except:
-            raise RuntimeError(
-                'Invalid hotfix_template must include '
-                '{hotfix} format and only it'
-            )
-
-        tmp_formats = set(re.findall('({.+?})', prerelease_template))
-        prerelease_formats = set(placeholders[4:5])
-        try:
-            assert len(tmp_formats) == 1
-            assert len(tmp_formats & prerelease_formats) == 1
-        except:
-            raise RuntimeError(
-                'Invalid prerelease_template must include '
-                '{prerelease} format and only it'
-            )
-
-        tmp_formats = set(re.findall('({.+?})', buildmetadata_template))
-        buildmetadata_formats = set(placeholders[5:6])
-        try:
-            assert len(tmp_formats) == 1
-            assert len(tmp_formats & buildmetadata_formats) == 1
-        except:
-            raise RuntimeError(
-                'Invalid buildmetadata_template must include '
-                '{hbuildmetadata} format and only it'
-            )
-
-        def shorten_template(template, placeholders):
-            templates = []
-            placeholders = list(placeholders) + ['{NON_EXISTING_PLACEHOLDER}']
-            pos = template.find(placeholders[0])
-            prefix = template[:pos]
-            for placeholder in placeholders:
-                prefix = prefix.replace(placeholder, '')
-
-            for i in range(len(placeholders) - 1):
-                cur_pos = template.find(placeholders[i])
-                next_pos = template.find(placeholders[i + 1])
-                if next_pos < 0:
-                    next_pos = None
-
-                tmp = template[cur_pos:next_pos]
-                for placeholder in placeholders:
-                    tmp = tmp.replace(placeholder, '')
-
-                tmp = '{0}{1}'.format(placeholders[i], tmp)
-
-                templates.append(tmp)
-
-                if next_pos is None:
-                    break
-
-            ver_format = ''
-            templates[0] = '{0}{1}'.format(prefix, templates[0])
-            for t in templates:
-                ver_format += t
-
-            return ver_format
-
-        semver_template = shorten_template(semver_template, placeholders[:3])
-        hotfix_template = shorten_template(hotfix_template, placeholders[3:4])
-        prerelease_template = shorten_template(prerelease_template, placeholders[4:5])
-        buildmetadata_template = shorten_template(buildmetadata_template, placeholders[5:6])
-
-        template = semver_template + \
-                   hotfix_template + \
-                   prerelease_template + \
-                   buildmetadata_template
-
-        if len(template) > 300:
-            raise RuntimeError('Template too long: max 300 chars')
-
-        return template, semver_template, hotfix_template, prerelease_template, buildmetadata_template
 
     def gen_vmn_version(self, major, minor, patch, hotfix=None, prerelease=None, buildmetadata=None):
         if self._hide_zero_hotfix and hotfix == '0':
@@ -307,151 +195,9 @@ class IVersionsStamper(object):
 
         return vmn_version
 
-    def get_formatted_version(self, raw_vmn_version):
-        match = re.search(
-            stamp_utils.VMN_REGEX,
-            raw_vmn_version
-        )
-
-        gdict = match.groupdict()
-        if self._hide_zero_hotfix and gdict['hotfix'] == '0':
-            gdict['hotfix'] = None
-
-        formatted_version = self._semver_template.format(
-            major=gdict['major'],
-            minor=gdict['minor'],
-            patch=gdict['patch']
-        )
-        if gdict['hotfix'] is not None:
-            formatted_version += self._hotfix_template.format(
-                hotfix=gdict['hotfix']
-            )
-        if gdict['prerelease'] is not None:
-            formatted_version += self._prerelease_template.format(
-                prerelease=gdict['prerelease']
-            )
-        if gdict['buildmetadata'] is not None:
-            formatted_version += self._buildmetadata_template.format(
-                buildmetadata=gdict['buildmetadata']
-            )
-
-        return formatted_version
-
-    def get_vmn_version_info(
-            self,
-            tag_name=None,
-            app_name=None,
-            root_app_name=None
-    ):
-        if tag_name is None and app_name is None and root_app_name is None:
-            return None
-
-        formated_tag_name = tag_name
-        commit_tag_obj = None
-        version = None
-        prerelease = None
-        buildmetadata = None
-        releasenotes = None
-        if tag_name is not None:
-            try:
-                used_app_name, ver_type, version, hotfix, prerelease, buildmetadata, releasenotes = \
-                    stamp_utils.VersionControlBackend.get_tag_properties(tag_name)
-
-                # refactor hotfix check logic
-                if hotfix != '0':
-                    version = f'{version}.{hotfix}'
-
-                commit_tag_obj = self.backend._be.commit(tag_name)
-            except:
-                return None
-        elif app_name is not None or root_app_name is not None:
-            used_app_name = app_name
-            if root_app_name is not None:
-                used_app_name = root_app_name
-
-            formated_tag_name = stamp_utils.VersionControlBackend.get_tag_name(
-                used_app_name
-            )
-            # TODO: improve (O(app tags)) to iter_commits as we always wish to give latest
-            # (timewise) stamp commit reachable from current branch
-            tags = self.backend.tags(filter=f'{formated_tag_name}_*')
-
-            for tag in tags:
-                _app_name, _, version, hotfix, prerelease, _, _ = \
-                    stamp_utils.VersionControlBackend.get_tag_properties(tag)
-                # TODO: add warning here should not happen
-                if version is None:
-                    continue
-
-                # TODO: add warning here should not happen
-                if _app_name != used_app_name:
-                    continue
-
-                _commit_tag_obj = self.backend._be.commit(tag)
-                # TODO: add warning here should not happen
-                if _commit_tag_obj.author.name != stamp_utils.VMN_USER_NAME:
-                    continue
-
-                if hotfix != '0':
-                    version = f'{version}.{hotfix}'
-                tag_name = tag
-                commit_tag_obj = _commit_tag_obj
-
-        if commit_tag_obj is None:
-            return None
-
-        all_tags = {}
-
-        found = False
-        # TODO: improve to iter_commits
-        tags = self.backend.tags(filter=f'{formated_tag_name}*')
-        for tag in tags:
-            if found and commit_tag_obj.hexsha != self.backend._be.commit(tag_name).hexsha:
-                break
-            if commit_tag_obj.hexsha != self.backend._be.commit(tag_name).hexsha:
-                continue
-
-            found = True
-
-            tagd = {'tag': tag}
-
-            tagd['app_name'], \
-            tagd['type'],\
-            tagd['version'],\
-            tagd['hotfix'], \
-            tagd['prerelease'],\
-            tagd['buildmetadata'],\
-            tagd['releasenotes'] = \
-                stamp_utils.VersionControlBackend.get_tag_properties(tag)
-            tagd['message'] = \
-                self.backend._be.tag(f'refs/tags/{tag}').object.message
-
-            all_tags[tagd['type']] = tagd
-
-            # TODO:: Check API commit version
-
-        if 'version' not in all_tags:
-            all_tags['version'] = all_tags['rc']
-
-        version_info = yaml.safe_load(all_tags['version']['message'])
-        if 'root' in all_tags:
-            version_info.update(
-                yaml.safe_load(all_tags['root']['message'])
-            )
-
-        version_info['stamping']['app']['orig_current_mode'] = \
-            version_info['stamping']['app']['current_mode']
-        version_info['stamping']['app']['orig_current_mode_suffix'] = \
-            version_info['stamping']['app']['current_mode_suffix']
-
-        if 'rc' in all_tags:
-           version_info['stamping']['app']['_version'] = version
-           version_info['stamping']['app']['current_mode'] = 'release'
-           version_info['stamping']['app']['current_mode_suffix'] = ''
-           version_info['stamping']['app']['version'] = \
-               self.get_formatted_version(version)
-
-        return version_info
+    @staticmethod
+    def parse_template(template: str) -> None:
+        return template
 
     @staticmethod
     def write_version_to_file(file_path: str, version_number: str) -> None:
@@ -501,10 +247,7 @@ class IVersionsStamper(object):
 
             ver_conf_yml = {
                 "conf": {
-                    "semver_template": self._semver_template,
-                    "hotfix_template": self._hotfix_template,
-                    "prerelease_template": self._prerelease_template,
-                    "buildmetadata_template": self._buildmetadata_template,
+                    "template": self.template,
                     "deps": self._raw_configured_deps,
                     "extra_info": self._extra_info,
                 },
@@ -558,7 +301,7 @@ class VersionControlStamper(IVersionsStamper):
 
     def find_matching_version(self):
         app_tag_name = \
-            stamp_utils.VersionControlBackend.get_tag_name(
+            stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
                 self._name,
                 version=None,
             )
@@ -566,9 +309,9 @@ class VersionControlStamper(IVersionsStamper):
         # Try to find any version of the application matching the
         # user's repositories local state
         for tag in self.backend.tags(filter=f'{app_tag_name}_*'):
-            ver_info = self.get_vmn_version_info(tag_name=tag)
+            ver_info = self.backend.get_vmn_version_info(tag_name=tag)
             if ver_info is None:
-                continue
+                raise RuntimeError(f"Failed to get information for tag {tag}")
 
             found = True
             for k, v in ver_info['stamping']['app']['changesets'].items():
@@ -605,29 +348,14 @@ class VersionControlStamper(IVersionsStamper):
             LOGGER.debug('{}'.format(e))
             return None
 
-    def decide_on_starting_version(self) -> str:
-        only_initialized = self.tracked and \
-            self.ver_info_form_repo['stamping']['app']['_version'] == '0.0.0'
-
-        if only_initialized or not self.tracked:
-            # first stamp
-            return self._starting_version
-
-        version = self.ver_info_form_repo['stamping']['app']["_version"]
-        version_str_from_file = self.get_version_number_from_file()
-        if version_str_from_file:
-            version = version_str_from_file
-
-        return version
-
     def add_to_version(self):
         if not self._buildmetadata:
             raise RuntimeError("TODO xxx")
 
-        old_version = self.decide_on_starting_version()
+        old_version = self.get_version_number_from_file()
 
         self._should_publish = False
-        tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+        tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
             self._name, old_version
         )
         if self.backend.changeset() != self.backend.changeset(tag=tag_name):
@@ -649,7 +377,7 @@ class VersionControlStamper(IVersionsStamper):
 
         version = f'{version}+{self._buildmetadata}'
 
-        tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+        tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
             self._name, version
         )
 
@@ -658,11 +386,18 @@ class VersionControlStamper(IVersionsStamper):
         return version
 
     def release_app_version(self, version):
-        if not self._releasing_rc:
+        # wierd
+        releasing_rc = (
+                self._previous_version_prerelease_mode != 'release' and
+                self._release_mode is None and
+                self._prerelease == 'release'
+        )
+
+        if not releasing_rc:
             raise RuntimeError("No prerelease version to release")
 
         self._should_publish = False
-        tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+        tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
             self._name, version
         )
         match = re.search(
@@ -691,7 +426,7 @@ class VersionControlStamper(IVersionsStamper):
         if hotfix != '0':
             version = f'{version}.{hotfix}'
 
-        tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+        tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
             self._name, version
         )
 
@@ -703,7 +438,7 @@ class VersionControlStamper(IVersionsStamper):
             self,
             override_current_version=None,
     ):
-        old_version = self.decide_on_starting_version()
+        old_version = self.get_version_number_from_file()
 
         matched_version = self.find_matching_version()
         if matched_version == '0.0.0':
@@ -747,7 +482,7 @@ class VersionControlStamper(IVersionsStamper):
             info['env'] = dict(os.environ)
 
         self._version_info_message['stamping']['app']['version'] = \
-            self.get_formatted_version(current_version)
+            stamp_utils.VersionControlBackend.get_utemplate_formatted_version(current_version, self.template)
         self._version_info_message['stamping']['app']['_version'] = \
             current_version
         self._version_info_message['stamping']['app']['previous_version'] = \
@@ -766,14 +501,11 @@ class VersionControlStamper(IVersionsStamper):
         if self._root_app_name is None:
             return None
 
-        ver_info = self.get_vmn_version_info(
-            root_app_name=self._root_app_name
-        )
-        if ver_info is None:
-            old_version = 0
-        else:
-            old_version = ver_info['stamping']['root_app']["version"]
+        if 'version' not in self.ver_info_form_repo['stamping']['root_app']:
+            raise (f"Root app name is {self._root_app_name} and app name is {self._name}. "
+                   f"However no version information for root was found")
 
+        old_version = self.ver_info_form_repo['stamping']['root_app']["version"]
         if override_version is None:
             override_version = old_version
 
@@ -781,21 +513,19 @@ class VersionControlStamper(IVersionsStamper):
 
         with open(self._root_app_conf_path) as f:
             data = yaml.safe_load(f)
+            # TODO: why do we need deepcopy here?
             external_services = copy.deepcopy(
                 data['conf']['external_services']
             )
 
-        if ver_info is None:
-            services = {}
-        else:
-            root_app = ver_info['stamping']['root_app']
-            services = copy.deepcopy(root_app['services'])
+        root_app = self.ver_info_form_repo['stamping']['root_app']
+        services = copy.deepcopy(root_app['services'])
 
-        self._version_info_message['stamping']['root_app'] = {
+        self._version_info_message['stamping']['root_app'].update({
             'version': root_version,
             'services': services,
-            'external_services': external_services,
-        }
+            'external_services': external_services
+        })
 
         msg_root_app = self._version_info_message['stamping']['root_app']
         msg_app = self._version_info_message['stamping']['app']
@@ -848,13 +578,13 @@ class VersionControlStamper(IVersionsStamper):
             include=version_files
         )
 
-        tags = [stamp_utils.VersionControlBackend.get_tag_name(
+        tags = [stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
             self._name, app_version
         )]
 
         if main_version is not None:
             tags.append(
-                stamp_utils.VersionControlBackend.get_tag_name(
+                stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
                     self._root_app_name, main_version)
             )
 
@@ -953,20 +683,20 @@ def show(vcs, params, version=None):
 
                 return 1
 
-    tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+    tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
         params['name'],
         version,
     )
 
     if version is None:
         if params['root']:
-            ver_info = vcs.get_vmn_version_info(
+            ver_info = vcs.backend.get_vmn_version_info(
                 root_app_name=params['root_app_name']
             )
         else:
-            ver_info = vcs.get_vmn_version_info(app_name=params['name'])
+            ver_info = vcs.backend.get_vmn_version_info(app_name=params['name'])
     else:
-        ver_info = vcs.get_vmn_version_info(tag_name=tag_name)
+        ver_info = vcs.backend.get_vmn_version_info(tag_name=tag_name)
 
     if ver_info is None:
         LOGGER.error(
@@ -1029,18 +759,43 @@ def _safety_validation(
     return err
 
 
-def get_version(versions_be_ifc, pull, init_only):
-    if pull:
-        versions_be_ifc.retrieve_remote_changes()
+def init_app(versions_be_ifc, starting_version):
+    if versions_be_ifc.tracked:
+        raise RuntimeError("Will not init an already tracked app")
 
-    if versions_be_ifc._current_mode == 'release' and versions_be_ifc._release_mode is None:
+    versions_be_ifc.create_config_files()
+    VersionControlStamper.write_version_to_file(
+        file_path=versions_be_ifc._version_file_path,
+        version_number=starting_version
+    )
+
+    err = versions_be_ifc.publish(starting_version, 0)
+    if not err:
+        raise RuntimeError("Failed to init app")
+
+    return 0
+
+
+def stamp_release(versions_be_ifc):
+    if versions_be_ifc._previous_version_prerelease_mode == 'release' and versions_be_ifc._release_mode is None:
         raise RuntimeError(
             'When stamping from a previous release version '
             'a release mode must be specified'
         )
 
-    if versions_be_ifc.tracked and init_only:
-        raise RuntimeError("Will not init an already tracked app")
+
+def get_version(versions_be_ifc, pull):
+    if pull:
+        versions_be_ifc.retrieve_remote_changes()
+
+    if versions_be_ifc._previous_version_prerelease_mode == 'release' and versions_be_ifc._release_mode is None:
+        raise RuntimeError(
+            'When stamping from a previous release version '
+            'a release mode must be specified'
+        )
+
+    if not versions_be_ifc.tracked:
+        raise RuntimeError("Trying to stamp an untracked app. Init app first")
 
     # Here we one of the following:
     # tracked & not init only => normal stamp
@@ -1055,20 +810,15 @@ def get_version(versions_be_ifc, pull, init_only):
     current_version = '0.0.0'
     main_ver = None
 
-    versions_be_ifc.create_config_files()
-
     while retries:
         retries -= 1
 
-        if not init_only:
-            current_version = versions_be_ifc.stamp_app_version(
-                override_current_version,
-            )
-            main_ver = versions_be_ifc.stamp_main_system_version(
-                override_main_current_version,
-            )
-
-        # TODO:: handle case where init_only was set for an existing app
+        current_version = versions_be_ifc.stamp_app_version(
+            override_current_version,
+        )
+        main_ver = versions_be_ifc.stamp_main_system_version(
+            override_main_current_version,
+        )
 
         err = versions_be_ifc.publish(current_version, main_ver)
         if not err:
@@ -1138,7 +888,7 @@ def goto_version(vcs, params, version):
 
                 return 1
 
-    tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+    tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
         params['name'],
         version,
     )
@@ -1341,7 +1091,6 @@ def build_world(name, working_dir, root=False):
         'working_dir': working_dir,
         'root': root,
         'release_mode': None,
-        'starting_version': '0.0.0',
         'mode': None,
         'mode_suffix': '',
         'buildmetadata': None,
@@ -1408,16 +1157,7 @@ def build_world(name, working_dir, root=False):
         }
     }
 
-    params['semver_template'] = '{major}.{minor}.{patch}'
-    params['hotfix_template'] = '_{hotfix}'
-    params['prerelease_template'] = '-{prerelease}'
-    params['buildmetadata_template'] = '+{buildmetadata}'
-    params['version_template'], _, _, _, _ = IVersionsStamper.parse_template(
-        params['semver_template'],
-        params['hotfix_template'],
-        params['prerelease_template'],
-        params['buildmetadata_template'],
-    )
+    params['template'] = '{major}.{minor}.{patch}'
 
     params["extra_info"] = False
     # TODO: handle redundant parse template here
@@ -1438,16 +1178,7 @@ def build_world(name, working_dir, root=False):
 
     with open(app_conf_path, 'r') as f:
         data = yaml.safe_load(f)
-        params['semver_template'] = data["conf"]["semver_template"]
-        params['version_template'] = params['semver_template']
-        params['hotfix_template'] = data["conf"]["hotfix_template"]
-        params['version_template'] += params['hotfix_template']
-        params['prerelease_template'] = data["conf"]["prerelease_template"]
-        params['version_template'] += params['prerelease_template']
-        params['buildmetadata_template'] = data["conf"]["buildmetadata_template"]
-        params['version_template'] += params['buildmetadata_template']
-        params["extra_info"] = data["conf"]["extra_info"]
-        params['raw_configured_deps'] = data["conf"]["deps"]
+        params['template'] = data["conf"]["template"]
 
         deps = {}
         for rel_path, dep in params['raw_configured_deps'].items():
@@ -1554,7 +1285,6 @@ def _handle_goto(args, params):
 
 def _handle_stamp(args, params):
     params['release_mode'] = args.release_mode
-    params['starting_version'] = args.starting_version
     vcs = VersionControlStamper(params)
 
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
@@ -1566,7 +1296,7 @@ def _handle_stamp(args, params):
         return err
 
     try:
-        version = get_version(vcs, args.pull, args.init_only)
+        version = get_version(vcs, args.pull)
     except Exception as exc:
         LOGGER.exception('Logged Exception message:')
 
@@ -1675,27 +1405,30 @@ def parse_user_commands(command_line):
     )
     parser.set_defaults(debug=False)
     subprasers = parser.add_subparsers(dest='command')
-    subprasers.add_parser(
+    pinit = subprasers.add_parser(
         'init',
-        help='initialize version tracking'
+        help='initialize version tracking for the repository. '
+             'This command should be called only once'
+    )
+    pinit.add_argument(
+        'name',
+        default=None,
+        help="The application's name to initialize version tracking for"
     )
     pshow = subprasers.add_parser(
         'show',
         help='show app version'
     )
     pshow.add_argument(
-        'name', help="The application's name"
+        'name', help="The application's name to show the version for"
     )
     pshow.add_argument(
         '-v', '--version',
         default=None,
-        required=False,
-        help="The version to show"
+        help=f"The version to show. Must be specified in the raw version format:"
+             f" {stamp_utils.VMN_VERSION_FORMAT}"
+
     )
-    pshow.add_argument('--pr', '--prerelease')
-    pshow.add_argument('--mv', '--mode_version', default=None)
-    pshow.add_argument('--ms', '--mode_suffix', default='')
-    pshow.add_argument('--bm', '--buildmetadata', default=None)
     pshow.add_argument('--root', dest='root', action='store_true')
     pshow.set_defaults(root=False)
     pshow.add_argument('--verbose', dest='verbose', action='store_true')
@@ -1714,25 +1447,16 @@ def parse_user_commands(command_line):
     pstamp.add_argument(
         '--pr', '--prerelease',
         default=None,
-        help='Version mode. Can be anything really until you decide '
-             'to set the mode to be release again'
+        help='Prerelease version. Can be anything really until you decide '
+             'to release the version'
     )
     pstamp.add_argument(
-        '--ms', '--mode-suffix',
+        '--prs', '--prerelease-suffix',
         default='',
-        help='Version mode suffix. Can be anything'
-    )
-    pstamp.add_argument('--bm', '--buildmetadata', default=None)
-    pstamp.add_argument(
-        '-s', '--starting-version',
-        default='0.0.0',
-        required=False,
-        help='Starting version'
+        help='Version prerelease suffix. Can be anything'
     )
     pstamp.add_argument('--pull', dest='pull', action='store_true')
     pstamp.set_defaults(pull=False)
-    pstamp.add_argument('--init-only', dest='init_only', action='store_true')
-    pstamp.set_defaults(init_only=False)
     pstamp.add_argument(
         'name', help="The application's name"
     )
@@ -1741,12 +1465,9 @@ def parse_user_commands(command_line):
         '-v', '--version',
         default=None,
         required=False,
-        help="The version to go to"
+        help=f"The version to go to in the format: "
+             f" {stamp_utils.VMN_VERSION_FORMAT}"
     )
-    pgoto.add_argument('--pr', '--prerelease')
-    pgoto.add_argument('--prv', '--prerelease-version', default=None)
-    pgoto.add_argument('--ms', '--prerelease-suffix', default='')
-    pgoto.add_argument('--bm', '--build-metadata', default='')
     pgoto.add_argument('--root', dest='root', action='store_true')
     pgoto.set_defaults(root=False)
     pgoto.add_argument('--deps-only', dest='deps_only', action='store_true')
@@ -1757,22 +1478,14 @@ def parse_user_commands(command_line):
     )
     prelease = subprasers.add_parser(
         'release',
-        help='release app version'
+        help='Release app version'
     )
     prelease.add_argument(
         '-v', '--version',
         required=True,
-        help="The version to release"
-    )
-    prelease.add_argument(
-        '--pr', '--prerelease',
-        default=None,
-        help="The version to release"
-    )
-    prelease.add_argument(
-        '--prs', '--prerelease-suffix',
-        default='',
-        help="The version to release"
+        # TODO: should not have rn here
+        help=f"The version to release in the format: "
+             f" {stamp_utils.VMN_VERSION_FORMAT}"
     )
     prelease.add_argument(
         'name', help="The application's name"
@@ -1784,17 +1497,8 @@ def parse_user_commands(command_line):
     padd.add_argument(
         '-v', '--version',
         required=True,
-        help="The version to show"
-    )
-    padd.add_argument(
-        '--bm', '--buildmetadata',
-        default=None,
-        help="The version to show"
-    )
-    padd.add_argument(
-        '--rn', '--releasenotes',
-        default=None,
-        help="The version to show"
+        help=f"The version to add to in the format: "
+             f" {stamp_utils.VMN_VERSION_FORMAT}"
     )
     padd.add_argument(
         'name', help="The application's name"
