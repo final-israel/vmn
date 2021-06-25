@@ -684,12 +684,12 @@ def _init(args, params):
             user='vmn',
             include=[vmn_path, vmn_unique_path, git_ignore_path]
         )
+        be.push()
+
+        LOGGER.info('Initialized vmn tracking on {0}'.format(params['root_path']))
     else:
         init_app(vcs, params, args.version)
-
-    be.push()
-
-    LOGGER.info('Initialized vmn tracking on {0}'.format(params['root_path']))
+        LOGGER.info('Initialized app tracking on {0}'.format(params['root_app_dir_path']))
 
     del vcs
 
