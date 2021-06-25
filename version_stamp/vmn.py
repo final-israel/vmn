@@ -82,8 +82,6 @@ class IVersionsStamper(object):
             self._prerelease_version_ids = \
                 self.ver_info_form_repo['stamping']['app']["mode_count"]
 
-        self._should_publish = True
-
         self._version_info_message = {
             'vmn_info': {
                 'description_message_version': '1.1',
@@ -251,7 +249,7 @@ class IVersionsStamper(object):
         return flat_dependency_repos
 
     def get_be_formatted_version(self, version):
-        return self.get_formatted_version(version)
+        return stamp_utils.VersionControlBackend.get_utemplate_formatted_version(version, self.template)
 
     def find_matching_version(self):
         raise NotImplementedError('Please implement this method')
@@ -465,6 +463,7 @@ class VersionControlStamper(IVersionsStamper):
         if matched_version is not None:
             # Good we have found an existing version matching
             # the actual_deps_state
+            #TODO: why is it here?
             self._should_publish = False
 
             return self.get_be_formatted_version(matched_version)
@@ -526,7 +525,7 @@ class VersionControlStamper(IVersionsStamper):
             )
 
         ver_info = self.backend.get_vmn_version_info(
-            root_app_name=self._root_app_name
+            self._root_app_name
         )
         if ver_info is None:
             old_version = 0
@@ -561,7 +560,8 @@ class VersionControlStamper(IVersionsStamper):
         return '{0}'.format(root_version)
 
     def get_files_to_add_to_index(self, paths):
-        changed = [item.a_path for item in self.backend._be.index.diff(None)]
+        changed = [os.path.join(self._root_path, item.a_path)
+                   for item in self.backend._be.index.diff(None)]
         untracked = [os.path.join(self._root_path, item)
                      for item in self.backend._be.untracked_files]
 
@@ -612,7 +612,7 @@ class VersionControlStamper(IVersionsStamper):
         )]
         msgs = [app_msg]
 
-        if root_app_version is not None:
+        if self._root_app_name is not None:
             root_app_msg = {
                 'stamping': {
                     'root_app': self._version_info_message['stamping']['root_app']
@@ -834,9 +834,9 @@ def init_app(versions_be_ifc, params, starting_version):
             'external_services': external_services
         })
 
-    msg_root_app = versions_be_ifc._version_info_message['stamping']['root_app']
-    msg_app = versions_be_ifc._version_info_message['stamping']['app']
-    msg_root_app['services'][versions_be_ifc._name] = msg_app['_version']
+        msg_root_app = versions_be_ifc._version_info_message['stamping']['root_app']
+        msg_app = versions_be_ifc._version_info_message['stamping']['app']
+        msg_root_app['services'][versions_be_ifc._name] = msg_app['_version']
 
     err = versions_be_ifc.publish(starting_version, root_app_version)
     if err:
