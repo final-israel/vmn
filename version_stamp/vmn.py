@@ -30,13 +30,32 @@ class IVersionsStamper(object):
         self._root_path = conf['root_path']
         self.backend, _ = stamp_utils.get_client(self._root_path)
         self._release_mode = conf['release_mode']
-        self._app_dir_path = conf['app_dir_path']
-        self._app_conf_path = conf['app_conf_path']
         self._prerelease = conf['mode']
         self._prerelease_suffix = conf['mode_suffix']
         self._buildmetadata = conf['buildmetadata']
         self._repo_name = '.'
+        self._should_publish = True
 
+        self._version_info_message = {
+            'vmn_info': {
+                'description_message_version': '1.1',
+                'vmn_version': version_mod.version
+            },
+            'stamping': {
+                'msg': '',
+                'app': {
+                    "info": {},
+                },
+                'root_app': {}
+            }
+        }
+
+        if conf['name'] is None:
+            self.tracked = False
+            return
+
+        self._app_dir_path = conf['app_dir_path']
+        self._app_conf_path = conf['app_conf_path']
         self._root_app_name = conf['root_app_name']
         self._root_app_conf_path = conf['root_app_conf_path']
         self._root_app_dir_path = conf['root_app_dir_path']
@@ -53,6 +72,7 @@ class IVersionsStamper(object):
         self._prerelease_version_ids = {}
         self._previous_version_prerelease_mode = 'release'
         self._previous_version_prerelease_mode_suffix = ''
+        #TODO: refactor
         self._hide_zero_hotfix = True
 
         self.ver_info_form_repo = \
@@ -61,10 +81,6 @@ class IVersionsStamper(object):
         if self.tracked:
             self._prerelease_version_ids = \
                 self.ver_info_form_repo['stamping']['app']["mode_count"]
-            self._previous_version_prerelease_mode = \
-                self.ver_info_form_repo['stamping']['app']["orig_current_mode"]
-            self._previous_version_prerelease_mode_suffix = \
-                self.ver_info_form_repo['stamping']['app']["orig_current_mode_suffix"]
 
         self._should_publish = True
 
@@ -100,6 +116,8 @@ class IVersionsStamper(object):
             self._version_info_message['stamping']['root_app'] = {
                 'name': self._root_app_name,
                 'latest_service': self._name,
+                'services': {},
+                'external_services': {}
             }
 
     def __del__(self):
@@ -205,7 +223,7 @@ class IVersionsStamper(object):
         # weather the file pre exists or not
         try:
             with open(file_path, 'w') as fid:
-                ver_dict = {'last_stamped_version': version_number}
+                ver_dict = {'version_to_stamp_from': version_number}
                 yaml.dump(ver_dict, fid)
         except IOError as e:
             LOGGER.exception('there was an issue writing ver file: {}'
@@ -285,7 +303,7 @@ class IVersionsStamper(object):
     ):
         raise NotImplementedError('Please implement this method')
 
-    def stamp_main_system_version(self, override_version=None):
+    def stamp_root_app_version(self, override_version=None):
         raise NotImplementedError('Please implement this method')
 
     def retrieve_remote_changes(self):
@@ -309,7 +327,7 @@ class VersionControlStamper(IVersionsStamper):
         # Try to find any version of the application matching the
         # user's repositories local state
         for tag in self.backend.tags(filter=f'{app_tag_name}_*'):
-            ver_info = self.backend.get_vmn_version_info(tag_name=tag)
+            ver_info = self.backend.get_vmn_tag_version_info(tag)
             if ver_info is None:
                 raise RuntimeError(f"Failed to get information for tag {tag}")
 
@@ -340,7 +358,7 @@ class VersionControlStamper(IVersionsStamper):
         try:
             with open(self._version_file_path, 'r') as fid:
                 ver_dict = yaml.safe_load(fid)
-            return ver_dict.get('last_stamped_version')
+            return ver_dict.get('version_to_stamp_from')
         except FileNotFoundError as e:
             LOGGER.debug('could not find version file: {}'.format(
                 self._version_file_path)
@@ -494,7 +512,7 @@ class VersionControlStamper(IVersionsStamper):
 
         return current_version
 
-    def stamp_main_system_version(
+    def stamp_root_app_version(
             self,
             override_version=None,
     ):
@@ -502,10 +520,19 @@ class VersionControlStamper(IVersionsStamper):
             return None
 
         if 'version' not in self.ver_info_form_repo['stamping']['root_app']:
-            raise (f"Root app name is {self._root_app_name} and app name is {self._name}. "
-                   f"However no version information for root was found")
+            raise RuntimeError(
+                f"Root app name is {self._root_app_name} and app name is {self._name}. "
+                f"However no version information for root was found"
+            )
 
-        old_version = self.ver_info_form_repo['stamping']['root_app']["version"]
+        ver_info = self.backend.get_vmn_version_info(
+            root_app_name=self._root_app_name
+        )
+        if ver_info is None:
+            old_version = 0
+        else:
+            old_version = ver_info['stamping']['root_app']["version"]
+
         if override_version is None:
             override_version = old_version
 
@@ -535,18 +562,17 @@ class VersionControlStamper(IVersionsStamper):
 
     def get_files_to_add_to_index(self, paths):
         changed = [item.a_path for item in self.backend._be.index.diff(None)]
-        untracked = self.backend._be.untracked_files
+        untracked = [os.path.join(self._root_path, item)
+                     for item in self.backend._be.untracked_files]
 
         version_files = []
         for path in paths:
-            if path in changed:
-                version_files.append(path)
-            if self._app_conf_path in untracked:
+            if path in changed or path in untracked:
                 version_files.append(path)
 
         return version_files
 
-    def publish(self, app_version, main_version):
+    def publish(self, app_version, root_app_version):
         if not self._should_publish:
             return 0
 
@@ -565,36 +591,47 @@ class VersionControlStamper(IVersionsStamper):
                 version_files.extend(tmp)
 
         self._version_info_message['stamping']['msg'] = \
-            '{0}: update to version {1}'.format(
+            '{0}: Stamped version {1}\n\n'.format(
                 self._name, app_version
             )
-        msg = '{0}: Stamped version {1}\n\n'.format(
-            self._name,
-            app_version
-        )
         self.backend.commit(
-            message=msg,
+            message=self._version_info_message['stamping']['msg'],
             user='vmn',
             include=version_files
         )
 
+        app_msg = {
+            'vmn_info': self._version_info_message['vmn_info'],
+            'stamping': {
+                'app': self._version_info_message['stamping']['app']
+            }
+        }
+
         tags = [stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
             self._name, app_version
         )]
+        msgs = [app_msg]
 
-        if main_version is not None:
+        if root_app_version is not None:
+            root_app_msg = {
+                'stamping': {
+                    'root_app': self._version_info_message['stamping']['root_app']
+                }
+            }
+            msgs.append(root_app_msg)
             tags.append(
                 stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
-                    self._root_app_name, main_version)
+                    self._root_app_name, root_app_version)
             )
 
         all_tags = []
         all_tags.extend(tags)
 
         try:
-            tag_version_msg = yaml.dump(self._version_info_message, sort_keys=True)
-            self.backend.tag(tags, user='vmn', message=tag_version_msg)
-        except Exception:
+            #TODO: run untill prev_version = version for being able to init app multiple times
+            for t, m in zip(tags, msgs):
+                self.backend.tag([t], user='vmn', message=yaml.dump(m, sort_keys=True))
+        except Exception as exc:
             LOGGER.exception('Logged Exception message:')
             LOGGER.info('Reverting vmn changes for tags: {0} ...'.format(tags))
             self.backend.revert_vmn_changes(all_tags)
@@ -616,36 +653,45 @@ class VersionControlStamper(IVersionsStamper):
         self.backend.pull()
 
 
-def _init(vcs, params):
-    if os.path.isdir('{0}/.vmn'.format(params['root_path'])):
-        LOGGER.info('vmn tracking is already initialized')
-        return 1
-
-    be = vcs.backend
+def _init(args, params):
+    vcs = VersionControlStamper(params)
+    #TODO: refactor
     err = _safety_validation(vcs)
     if err:
+        del vcs
         return err
 
-    changeset = be.changeset()
+    be = vcs.backend
 
-    vmn_path = os.path.join(params['root_path'], '.vmn')
-    Path(vmn_path).mkdir(parents=True, exist_ok=True)
-    vmn_unique_path = os.path.join(vmn_path, changeset)
-    Path(vmn_unique_path).touch()
-    git_ignore_path = os.path.join(vmn_path, '.gitignore')
+    if args.name is None:
+        if vcs.tracked:
+            LOGGER.info('vmn tracking is already initialized')
+            return 1
 
-    with open(git_ignore_path, 'w+') as f:
-        f.write('vmn.lock{0}'.format(os.linesep))
+        changeset = be.changeset()
 
-    be.commit(
-        message=stamp_utils.INIT_COMMIT_MESSAGE,
-        user='vmn',
-        include=[vmn_path, vmn_unique_path, git_ignore_path]
-    )
+        vmn_path = os.path.join(params['root_path'], '.vmn')
+        Path(vmn_path).mkdir(parents=True, exist_ok=True)
+        vmn_unique_path = os.path.join(vmn_path, changeset)
+        Path(vmn_unique_path).touch()
+        git_ignore_path = os.path.join(vmn_path, '.gitignore')
+
+        with open(git_ignore_path, 'w+') as f:
+            f.write('vmn.lock{0}'.format(os.linesep))
+
+        be.commit(
+            message=stamp_utils.INIT_COMMIT_MESSAGE,
+            user='vmn',
+            include=[vmn_path, vmn_unique_path, git_ignore_path]
+        )
+    else:
+        init_app(vcs, params, args.version)
 
     be.push()
 
     LOGGER.info('Initialized vmn tracking on {0}'.format(params['root_path']))
+
+    del vcs
 
     return err
 
@@ -689,14 +735,9 @@ def show(vcs, params, version=None):
     )
 
     if version is None:
-        if params['root']:
-            ver_info = vcs.backend.get_vmn_version_info(
-                root_app_name=params['root_app_name']
-            )
-        else:
-            ver_info = vcs.backend.get_vmn_version_info(app_name=params['name'])
+        ver_info = vcs.backend.get_vmn_version_info(params['name'])
     else:
-        ver_info = vcs.backend.get_vmn_version_info(tag_name=tag_name)
+        ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
 
     if ver_info is None:
         LOGGER.error(
@@ -759,7 +800,7 @@ def _safety_validation(
     return err
 
 
-def init_app(versions_be_ifc, starting_version):
+def init_app(versions_be_ifc, params, starting_version):
     if versions_be_ifc.tracked:
         raise RuntimeError("Will not init an already tracked app")
 
@@ -769,8 +810,36 @@ def init_app(versions_be_ifc, starting_version):
         version_number=starting_version
     )
 
-    err = versions_be_ifc.publish(starting_version, 0)
-    if not err:
+    root_app_version = 0
+    services = {}
+    if versions_be_ifc._root_app_name is not None:
+        with open(versions_be_ifc._root_app_conf_path) as f:
+            data = yaml.safe_load(f)
+            # TODO: why do we need deepcopy here?
+            external_services = copy.deepcopy(
+                data['conf']['external_services']
+            )
+
+        ver_info = versions_be_ifc.backend.get_vmn_version_info(
+            versions_be_ifc._root_app_name
+        )
+        if ver_info:
+            root_app_version = int(ver_info['stamping']['root_app']["version"]) + 1
+            root_app = ver_info['stamping']['root_app']
+            services = copy.deepcopy(root_app['services'])
+
+        versions_be_ifc._version_info_message['stamping']['root_app'].update({
+            'version': root_app_version,
+            'services': services,
+            'external_services': external_services
+        })
+
+    msg_root_app = versions_be_ifc._version_info_message['stamping']['root_app']
+    msg_app = versions_be_ifc._version_info_message['stamping']['app']
+    msg_root_app['services'][versions_be_ifc._name] = msg_app['_version']
+
+    err = versions_be_ifc.publish(starting_version, root_app_version)
+    if err:
         raise RuntimeError("Failed to init app")
 
     return 0
@@ -816,7 +885,7 @@ def get_version(versions_be_ifc, pull):
         current_version = versions_be_ifc.stamp_app_version(
             override_current_version,
         )
-        main_ver = versions_be_ifc.stamp_main_system_version(
+        main_ver = versions_be_ifc.stamp_root_app_version(
             override_main_current_version,
         )
 
@@ -894,14 +963,9 @@ def goto_version(vcs, params, version):
     )
 
     if version is None:
-        if params['root']:
-            ver_info = vcs.get_vmn_version_info(
-                root_app_name=params['root_app_name']
-            )
-        else:
-            ver_info = vcs.get_vmn_version_info(app_name=params['name'])
+        ver_info = vcs.get_vmn_version_info(params['name'])
     else:
-        ver_info = vcs.get_vmn_version_info(tag_name=tag_name)
+        ver_info = vcs.get_vmn_tag_version_info(tag_name)
 
     if ver_info is None:
         LOGGER.error('No such app: {0}'.format(params['name']))
@@ -1215,7 +1279,7 @@ def main(command_line=None):
         'name': None
     }
 
-    if 'name' in args:
+    if 'name' in args and args.name:
         validate_app_name(args)
         initial_params['name'] = args.name
 
@@ -1354,7 +1418,6 @@ def _handle_add(args, params):
     return err
 
 
-
 def _handle_show(LOGGER, args, params):
     # root app does not have raw version number
     if params['root']:
@@ -1411,7 +1474,14 @@ def parse_user_commands(command_line):
              'This command should be called only once'
     )
     pinit.add_argument(
-        'name',
+        '-v', '--version',
+        default='0.0.0',
+        help=f"The version to init from. Must be specified in the raw version format:"
+             " {major}.{minor}.{patch}"
+
+    )
+    pinit.add_argument(
+        '--name',
         default=None,
         help="The application's name to initialize version tracking for"
     )

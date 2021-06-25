@@ -268,13 +268,11 @@ class GitBackend(VersionControlBackend):
             try:
                 self._origin.push(
                     'refs/tags/{0}'.format(tag),
-                    force=True,
                     o='ci.skip'
                 )
             except Exception:
                 self._origin.push(
                     'refs/tags/{0}'.format(tag),
-                    force=True
                 )
 
     def pull(self):
@@ -503,23 +501,21 @@ class GitBackend(VersionControlBackend):
         # TODO:: Check API commit version
         # TODO: check if newer vmn has stamped here
 
-        tag = self._be.commit(tag_name)
-
         # safe_load discards any text before the YAML document (if present)
-        commit_msg = yaml.safe_load(
-            tag.message
+        tag_msg = yaml.safe_load(
+            self._be.tag(f'refs/tags/{tag_name}').object.message
         )
-        if commit_msg is None or 'stamping' not in commit_msg:
+        if not tag_msg:
             raise RuntimeError(f'Corrupted tag msg of tag {tag_name}')
 
         all_tags = {}
         found = False
         # TODO: improve to iter_commits
-        tags = self.tags(filter=f'{tag_name}*')
+        tags = self.tags(filter=f'{tag_name.split("_")[0].split("-")[0]}*')
         for tag in tags:
             if found and commit_tag_obj.hexsha != self._be.commit(tag_name).hexsha:
                 break
-            if commit_tag_obj.hexsha != self._be.commit(tag_name).hexsha:
+            if commit_tag_obj.hexsha != self._be.commit(tag).hexsha:
                 continue
 
             found = True
@@ -539,8 +535,8 @@ class GitBackend(VersionControlBackend):
             version_info = yaml.safe_load(all_tags['version']['message'])
 
         if 'root' in all_tags:
-            version_info.update(
-                yaml.safe_load(all_tags['root']['message'])
+            version_info['stamping'].update(
+                yaml.safe_load(all_tags['root']['message'])['stamping']
             )
 
         return version_info
