@@ -513,7 +513,7 @@ class GitBackend(VersionControlBackend):
         # TODO: improve to iter_commits
         tags = self.tags(filter=f'{tag_name.split("_")[0].split("-")[0]}*')
         for tag in tags:
-            if found and commit_tag_obj.hexsha != self._be.commit(tag_name).hexsha:
+            if found and commit_tag_obj.hexsha != self._be.commit(tag).hexsha:
                 break
             if commit_tag_obj.hexsha != self._be.commit(tag).hexsha:
                 continue
