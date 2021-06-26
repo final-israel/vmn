@@ -306,7 +306,7 @@ class VersionControlStamper(IVersionsStamper):
             for k, v in ver_info['stamping']['app']['changesets'].items():
                 if ver_info['stamping']['app']['_version'] == ver_info['stamping']['app']['previous_version']:
                     found = False
-                    continue
+                    break
 
                 if k not in self.actual_deps_state:
                     found = False
@@ -322,7 +322,6 @@ class VersionControlStamper(IVersionsStamper):
                         break
                 elif v['hash'] != self.actual_deps_state[k]['hash']:
                     found = False
-                    #TODO: change to continue?
                     break
 
             if found:
@@ -472,6 +471,7 @@ class VersionControlStamper(IVersionsStamper):
                 matched_version_info['stamping']['app']['_version'],
                 matched_version_info['stamping']['app']['info'],
                 matched_version_info['stamping']['app']['previous_version'],
+                matched_version_info['stamping']['app']['release_mode'],
                 matched_version_info['stamping']['app']['prerelease_count'],
             )
 
@@ -514,12 +514,13 @@ class VersionControlStamper(IVersionsStamper):
             current_version,
             info,
             version_to_start_from,
+            self._release_mode,
             prerelease_count
         )
 
         return current_version
 
-    def update_stamping_info(self, current_version, info, version_to_start_from, prerelease_count):
+    def update_stamping_info(self, current_version, info, version_to_start_from, release_mode, prerelease_count):
         match = re.search(
             stamp_utils.VMN_REGEX,
             current_version
@@ -537,6 +538,8 @@ class VersionControlStamper(IVersionsStamper):
         self.current_version_info['stamping']['app']['prerelease'] = prerelease
         self.current_version_info['stamping']['app']['previous_version'] = \
             version_to_start_from
+        self.current_version_info['stamping']['app']['release_mode'] = \
+            release_mode
         self.current_version_info['stamping']['app']['info'] = \
             copy.deepcopy(info)
         self.current_version_info['stamping']['app']['stamped_on_branch'] = \
@@ -869,7 +872,7 @@ def init_app(versions_be_ifc, params, starting_version):
         })
 
         info = {}
-        versions_be_ifc.update_stamping_info(starting_version, info, starting_version, {})
+        versions_be_ifc.update_stamping_info(starting_version, info, starting_version, 'init', {})
 
     err = versions_be_ifc.publish_stamp(starting_version, root_app_version)
     if err:
