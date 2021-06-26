@@ -80,25 +80,15 @@ class IVersionsStamper(object):
             self._prerelease_count = \
                 self.ver_info_form_repo['stamping']['app']["prerelease_count"]
 
-        #TODO: initialize info message from what is known from version info object
         self._version_info_message = {
             'vmn_info': {
                 'description_message_version': '1.1',
                 'vmn_version': version_mod.version
             },
             'stamping': {
-                'msg': '',
                 'app': {
                     'name': self._name,
                     'changesets': self.actual_deps_state,
-                    'version': stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
-                        '0.0.0', self.template),
-                    '_version': '0.0.0',
-                    'release_mode': self._release_mode,
-                    "previous_version": '0.0.0',
-                    'prerelease': 'release',
-                    'prerelease_count': {},
-                    "info": {},
                 },
                 'root_app': {}
             }
@@ -250,7 +240,7 @@ class IVersionsStamper(object):
     def find_matching_version(self):
         raise NotImplementedError('Please implement this method')
 
-    def create_config_files(self):
+    def create_config_files(self, params):
         # If there is no file - create it
         if not os.path.isfile(self._app_conf_path):
             pathlib.Path(os.path.dirname(self._app_conf_path)).mkdir(
@@ -259,7 +249,7 @@ class IVersionsStamper(object):
 
             ver_conf_yml = {
                 "conf": {
-                    "template": self.template,
+                    "template": params['template'],
                     "deps": self._raw_configured_deps,
                     "extra_info": self._extra_info,
                 },
@@ -521,6 +511,11 @@ class VersionControlStamper(IVersionsStamper):
         if self._extra_info:
             info['env'] = dict(os.environ)
 
+        self.update_stamping_info(current_version, info, version_to_start_from)
+
+        return current_version
+
+    def update_stamping_info(self, current_version, info, version_to_start_from):
         self._version_info_message['stamping']['app']['version'] = \
             stamp_utils.VersionControlBackend.get_utemplate_formatted_version(current_version, self.template)
         self._version_info_message['stamping']['app']['_version'] = \
@@ -529,10 +524,8 @@ class VersionControlStamper(IVersionsStamper):
             version_to_start_from
         self._version_info_message['stamping']['app']['info'] = \
             info
-        self._version_info_message['stamping']['app']['stamped_on_branch'] =\
+        self._version_info_message['stamping']['app']['stamped_on_branch'] = \
             self.backend.get_active_branch()
-
-        return current_version
 
     def stamp_root_app_version(
             self,
@@ -828,7 +821,7 @@ def init_app(versions_be_ifc, params, starting_version):
         # TODO: exit with proper error message
         raise RuntimeError("Will not init an already tracked app")
 
-    versions_be_ifc.create_config_files()
+    versions_be_ifc.create_config_files(params)
     VersionControlStamper.write_version_to_file(
         file_path=versions_be_ifc._version_file_path,
         version_number=starting_version
@@ -858,9 +851,8 @@ def init_app(versions_be_ifc, params, starting_version):
             'external_services': external_services
         })
 
-        msg_root_app = versions_be_ifc._version_info_message['stamping']['root_app']
-        msg_app = versions_be_ifc._version_info_message['stamping']['app']
-        msg_root_app['services'][versions_be_ifc._name] = msg_app['_version']
+        info = {}
+        versions_be_ifc.update_stamping_info(starting_version, info, starting_version)
 
     err = versions_be_ifc.publish_stamp(starting_version, root_app_version)
     if err:
