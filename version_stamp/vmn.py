@@ -11,7 +11,6 @@ import pathlib
 from filelock import FileLock
 from multiprocessing import Pool
 import re
-from packaging import version as pversion
 
 
 CUR_PATH = '{0}/'.format(os.path.dirname(__file__))
@@ -31,7 +30,6 @@ class IVersionsStamper(object):
         self.backend, _ = stamp_utils.get_client(self._root_path)
         self._release_mode = conf['release_mode']
         self._prerelease = conf['prerelease']
-        self._prerelease_suffix = conf['prerelease_suffix']
         self._buildmetadata = conf['buildmetadata']
         self._repo_name = '.'
         self._should_publish = True
@@ -73,7 +71,6 @@ class IVersionsStamper(object):
             '_release': 0
         }
         self._previous_prerelease = 'release'
-        self._previous_prerelease_suffix = ''
         #TODO: refactor
         self._hide_zero_hotfix = True
 
@@ -82,8 +79,6 @@ class IVersionsStamper(object):
         self.tracked = self.ver_info_form_repo is not None
         if self.tracked:
             self._previous_prerelease = self.ver_info_form_repo['stamping']['app']["prerelease"]
-            self._previous_prerelease_suffix = \
-                self.ver_info_form_repo['stamping']['app']["prerelease_suffix"]
             self._prerelease_count = \
                 self.ver_info_form_repo['stamping']['app']["prerelease_count"]
 
@@ -104,7 +99,6 @@ class IVersionsStamper(object):
                     'release_mode': self._release_mode,
                     "previous_version": '0.0.0',
                     'prerelease': 'release',
-                    'prerelease_suffix': '',
                     'prerelease_count': {},
                     "info": {},
                 },
@@ -141,7 +135,6 @@ class IVersionsStamper(object):
         hotfix = gdict['hotfix']
         prerelease = self._prerelease
         prerelease_count = copy.deepcopy(self._prerelease_count)
-        prerelease_suffix = self._prerelease_suffix
 
         ret = {}
 
@@ -149,9 +142,8 @@ class IVersionsStamper(object):
         # stay with the previous one
         if prerelease is None:
             prerelease = self._previous_prerelease
-            prerelease_suffix = self._previous_prerelease_suffix
 
-        counter_key = f"{prerelease}_{prerelease_suffix}"
+        counter_key = f"{prerelease}"
         assert not counter_key.startswith('release')
         if self._previous_prerelease != 'release' and self._release_mode is None:
             if counter_key not in prerelease_count:
@@ -161,7 +153,6 @@ class IVersionsStamper(object):
 
             ret['prerelease_count'] = copy.deepcopy(prerelease_count)
             ret['prerelease'] = prerelease
-            ret['prerelease_suffix'] = prerelease_suffix
         elif self._previous_prerelease != 'release' and self._release_mode is not None and prerelease != 'release':
             prerelease_count = {
                 counter_key: 1,
@@ -170,7 +161,6 @@ class IVersionsStamper(object):
 
             ret['prerelease_count'] = copy.deepcopy(prerelease_count)
             ret['prerelease'] = prerelease
-            ret['prerelease_suffix'] = prerelease_suffix
         elif self._previous_prerelease == 'release' and prerelease != 'release':
             prerelease_count = {
                 counter_key: 1,
@@ -179,7 +169,6 @@ class IVersionsStamper(object):
 
             ret['prerelease_count'] = prerelease_count
             ret['prerelease'] = prerelease
-            ret['prerelease_suffix'] = prerelease_suffix
 
         if self._release_mode == 'major':
             major = str(int(major) + 1)
@@ -200,7 +189,7 @@ class IVersionsStamper(object):
         prerelease_ver = None
         if not prerelease.startswith('release'):
             prerelease_ver = \
-                prerelease + str(prerelease_count[counter_key]) + prerelease_suffix
+                prerelease + str(prerelease_count[counter_key])
 
         verstr = self.gen_vmn_version(
             major, minor, patch,
@@ -1194,7 +1183,6 @@ def build_world(name, working_dir, root=False):
         'root': root,
         'release_mode': None,
         'prerelease': None,
-        'prerelease_suffix': '',
         'buildmetadata': None,
     }
 
@@ -1365,14 +1353,13 @@ def validate_app_name(args):
 
 def _handle_goto(args, params):
     params['prerelease'] = args.mode
-    params['prerelease_suffix'] = args.mode_suffix
     params['buildmetadata'] = args.build_metadata
     version = args.version
     if version is not None and \
             args.mode is not None and \
             args.mode_version is not None:
-        version = f'{version}_{args.mode}-{args.mode_version}' \
-                  f'{args.mode_suffix}'
+        version = f'{version}_{args.mode}-{args.mode_version}'
+
     if version is not None and args.build_metadata is not None:
         version = f'{version}+{args.build_metadata}'
     # TODO: check version with VMN_REGEX
@@ -1388,7 +1375,6 @@ def _handle_goto(args, params):
 def _handle_stamp(args, params):
     params['release_mode'] = args.release_mode
     params['prerelease'] = args.pr
-    params['prerelease_suffix'] = args.prs
     vcs = VersionControlStamper(params)
 
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
@@ -1470,7 +1456,6 @@ def _handle_show(LOGGER, args, params):
     # TODO: handle cmd specific params differently
     # all this should be vmn internal to semver pr1 bm4 params
     #params['prerelease'] = args.mode
-    #params['prerelease_suffix'] = args.mode_suffix
     #params['buildmetadata'] = args.build_metadata
 
     vcs = VersionControlStamper(params)
@@ -1551,11 +1536,6 @@ def parse_user_commands(command_line):
         default=None,
         help='Prerelease version. Can be anything really until you decide '
              'to release the version'
-    )
-    pstamp.add_argument(
-        '--prs', '--prerelease-suffix',
-        default='',
-        help='Version prerelease suffix. Can be anything'
     )
     pstamp.add_argument('--pull', dest='pull', action='store_true')
     pstamp.set_defaults(pull=False)
