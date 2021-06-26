@@ -69,7 +69,7 @@ class IVersionsStamper(object):
         self._raw_configured_deps = conf['raw_configured_deps']
         self.actual_deps_state = conf["actual_deps_state"]
         self._flat_configured_deps = self.get_deps_changesets()
-        self._prerelease_version_ids = {
+        self._prerelease_count = {
             '_release': 0
         }
         self._previous_prerelease = 'release'
@@ -81,9 +81,13 @@ class IVersionsStamper(object):
             self.backend.get_vmn_version_info(self._name)
         self.tracked = self.ver_info_form_repo is not None
         if self.tracked:
-            self._prerelease_version_ids = \
-                self.ver_info_form_repo['stamping']['app']["mode_count"]
+            self._previous_prerelease = self.ver_info_form_repo['stamping']['app']["prerelease"]
+            self._previous_prerelease_suffix = \
+                self.ver_info_form_repo['stamping']['app']["prerelease_suffix"]
+            self._prerelease_count = \
+                self.ver_info_form_repo['stamping']['app']["prerelease_count"]
 
+        #TODO: initialize info message from what is known from version info object
         self._version_info_message = {
             'vmn_info': {
                 'description_message_version': '1.1',
@@ -101,7 +105,7 @@ class IVersionsStamper(object):
                     "previous_version": '0.0.0',
                     'prerelease': 'release',
                     'prerelease_suffix': '',
-                    'mode_count': {},
+                    'prerelease_count': {},
                     "info": {},
                 },
                 'root_app': {}
@@ -136,7 +140,7 @@ class IVersionsStamper(object):
         patch = gdict['patch']
         hotfix = gdict['hotfix']
         prerelease = self._prerelease
-        prerelease_count = copy.deepcopy(self._prerelease_version_ids)
+        prerelease_count = copy.deepcopy(self._prerelease_count)
         prerelease_suffix = self._prerelease_suffix
 
         ret = {}
@@ -406,22 +410,25 @@ class VersionControlStamper(IVersionsStamper):
             self._name, version
         )
 
-        self.backend.tag([tag_name], user='vmn')
+        messages = [
+            yaml.dump(
+                {
+                    'key': 'TODO '
+                },
+                sort_keys=True
+            ),
+        ]
+
+        self.backend.tag([tag_name], messages)
 
         return version
 
     def release_app_version(self, version):
-        # wierd
-        releasing_rc = (
-                self._previous_prerelease != 'release' and
-                self._release_mode is None and
-                self._prerelease == 'release'
-        )
+        releasing_rc = self._previous_prerelease != 'release'
 
         if not releasing_rc:
             raise RuntimeError("No prerelease version to release")
 
-        self._should_publish = False
         # TODO: get tag name from version
         tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
             self._name, version
@@ -437,29 +444,50 @@ class VersionControlStamper(IVersionsStamper):
         if 'prerelease' not in gdict:
             raise RuntimeError("Wrong version format specified. Can release only rc versions")
 
-        if self.backend.changeset() != self.backend.changeset(tag=tag_name):
-            raise RuntimeError(
-                'Releasing a release candidate is only possible when the repository '
-                'state is on the exact version. Please vmn goto the version you\'d '
-                'like to release.'
-            )
+        #if self.backend.changeset() != self.backend.changeset(tag=tag_name):
+        #    raise RuntimeError(
+        #        'Releasing a release candidate is only possible when the repository '
+        #        'state is on the exact version. Please vmn goto the version you\'d '
+        #        'like to release.'
+        #    )
 
-        _, _, version, hotfix, _, _, _ = \
+        props = \
             stamp_utils.VersionControlBackend.get_tag_properties(
                 tag_name
             )
 
-        if hotfix != '0':
-            version = f'{version}.{hotfix}'
+        if props['hotfix'] != '0':
+            props['version'] = f'{props["version"]}.{props["hotfix"]}'
 
         # TODO: get tag name from version
-        tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
-            self._name, version
+        release_tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
+            self._name, props['version']
         )
 
-        self.backend.tag([tag_name], user='vmn')
+        ver_info = {
+                    'stamping': {
+                        'app': copy.deepcopy(self.ver_info_form_repo['stamping']['app'])
+                    }
+                }
+        ver_info['stamping']['app']['_version'] = props['version']
+        ver_info['stamping']['app']['version'] = \
+            stamp_utils.VersionControlBackend.get_utemplate_formatted_version(props['version'], self.template)
+        ver_info['stamping']['app']['prerelease'] = 'release'
 
-        return version
+        messages = [
+            yaml.dump(
+                ver_info,
+                sort_keys=True
+            ),
+        ]
+
+        self.backend.tag(
+            [release_tag_name],
+            messages,
+            ref=self.backend.changeset(tag=tag_name)
+        )
+
+        return props['version']
 
     def stamp_app_version(
             self,
@@ -643,7 +671,7 @@ class VersionControlStamper(IVersionsStamper):
         try:
             #TODO: run untill prev_version = version for being able to init app multiple times
             for t, m in zip(tags, msgs):
-                self.backend.tag([t], user='vmn', message=yaml.dump(m, sort_keys=True))
+                self.backend.tag([t], [yaml.dump(m, sort_keys=True)])
         except Exception as exc:
             LOGGER.exception('Logged Exception message:')
             LOGGER.info('Reverting vmn changes for tags: {0} ...'.format(tags))
@@ -728,16 +756,13 @@ def show(vcs, params, version=None):
 
                 return 1
         else:
-            try:
-                _, _, _ = version.split('.')
-                try:
-                    pass
-                except ValueError:
-                    _, _, _, _ = version.split('.')
-            except ValueError:
+            match = re.search(
+                stamp_utils.VMN_REGEX,
+                version
+            )
+            if match is None:
                 LOGGER.error(
-                    'wrong version specified: version '
-                    'must be of form N1.N2.N3 or of form N1.N2.N3.N4 (if you use hotfix)'
+                    f'Wrong version specified: {version}'
                 )
 
                 return 1
@@ -958,17 +983,14 @@ def goto_version(vcs, params, version):
 
                 return 1
         else:
-            try:
-                _, _, _ = version.split('.')
-                try:
-                    pass
-                except ValueError:
-                    _, _, _, _ = version.split('.')
-            except ValueError:
+            match = re.search(
+                stamp_utils.VMN_REGEX,
+                version
+            )
+            if match is None:
                 LOGGER.error(
-                    'wrong version specified: version '
-                    'must be of form N1.N2.N3 or of form N1.N2.N3.N4 (if you use hotfix)'
-                    )
+                    f'Wrong version specified: {version}'
+                )
 
                 return 1
 
@@ -1391,8 +1413,6 @@ def _handle_stamp(args, params):
 
 
 def _handle_release(args, params):
-    params['prerelease'] = args.prerelease
-    params['prerelease_suffix'] = args.prerelease_suffix
     version = args.version
 
     vcs = VersionControlStamper(params)
@@ -1445,13 +1465,7 @@ def _handle_show(LOGGER, args, params):
     params['verbose'] = args.verbose
     LOGGER.disabled = False
     version = args.version
-    if version is not None and \
-            args.mode is not None and \
-            args.mode_version is not None:
-        version = f'{version}_{args.mode}-{args.mode_version}' \
-                  f'{args.mode_suffix}'
-    if version is not None and args.build_metadata is not None:
-        version = f'{version}+{args.build_metadata}'
+
     # TODO: check version with VMN_REGEX
     # TODO: handle cmd specific params differently
     # all this should be vmn internal to semver pr1 bm4 params

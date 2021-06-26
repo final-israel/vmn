@@ -31,6 +31,7 @@ VMN_REGEX_FULL = \
     '(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?' \
     '(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?' \
     '(?:-(?P<releasenotes>(?:rn\.[1-9]\d*))+)?$'
+# VMN Version regex
 VMN_REGEX = \
     '^(?P<major>0|[1-9]\d*)\.' \
     '(?P<minor>0|[1-9]\d*)\.' \
@@ -83,7 +84,7 @@ class VersionControlBackend(object):
     def __del__(self):
         pass
 
-    def tag(self, tags, user, message, force=False):
+    def tag(self, tags, messages, ref='HEAD'):
         raise NotImplementedError()
 
     def push(self, tags=()):
@@ -237,15 +238,15 @@ class GitBackend(VersionControlBackend):
     def __del__(self):
         self._be.close()
 
-    def tag(self, tags, user, message, force=False):
-        for tag in tags:
+    def tag(self, tags, messages, ref='HEAD'):
+        for tag, message in zip(tags, messages):
             # This is required in order to preserver chronological order when
             # listing tags since the taggerdate field is in seconds resolution
             time.sleep(1.1)
             self._be.create_tag(
                 tag,
+                ref=ref,
                 message=message,
-                force=force
             )
 
     def push(self, tags=()):
