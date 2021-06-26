@@ -67,9 +67,7 @@ class IVersionsStamper(object):
         self._raw_configured_deps = conf['raw_configured_deps']
         self.actual_deps_state = conf["actual_deps_state"]
         self._flat_configured_deps = self.get_deps_changesets()
-        self._prerelease_count = {
-            '_release': 0
-        }
+        self._prerelease_count = {}
         self._previous_prerelease = 'release'
         #TODO: refactor
         self._hide_zero_hotfix = True
@@ -149,14 +147,12 @@ class IVersionsStamper(object):
             if counter_key not in prerelease_count:
                 prerelease_count[counter_key] = 0
             prerelease_count[counter_key] += 1
-            prerelease_count['_release'] += 1
 
             ret['prerelease_count'] = copy.deepcopy(prerelease_count)
             ret['prerelease'] = prerelease
         elif self._previous_prerelease != 'release' and self._release_mode is not None and prerelease != 'release':
             prerelease_count = {
                 counter_key: 1,
-                '_release': 1
             }
 
             ret['prerelease_count'] = copy.deepcopy(prerelease_count)
@@ -164,7 +160,6 @@ class IVersionsStamper(object):
         elif self._previous_prerelease == 'release' and prerelease != 'release':
             prerelease_count = {
                 counter_key: 1,
-                '_release': 1
             }
 
             ret['prerelease_count'] = prerelease_count
