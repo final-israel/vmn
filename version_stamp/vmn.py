@@ -310,7 +310,7 @@ class VersionControlStamper(IVersionsStamper):
 
                 if k not in self.actual_deps_state:
                     found = False
-                    break
+                    continue
 
                 # when k is the "main repo" repo
                 if self._repo_name == k:
@@ -319,11 +319,10 @@ class VersionControlStamper(IVersionsStamper):
 
                     if v['hash'] != user_changeset:
                         found = False
-                        break
+                        continue
                 elif v['hash'] != self.actual_deps_state[k]['hash']:
                     found = False
-                    #TODO: change to continue?
-                    break
+                    continue
 
             if found:
                 return ver_info
