@@ -22,21 +22,31 @@ SEMVER_REGEX = \
     '(?P<patch>0|[1-9]\d*)' \
     '(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?' \
     '(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
+# Regex for matching versions stamped by vmn
+VMN_REGEX_FULL = \
+    '^(?P<major>0|[1-9]\d*)\.' \
+    '(?P<minor>0|[1-9]\d*)\.' \
+    '(?P<patch>0|[1-9]\d*)' \
+    '(?:\.(?P<hotfix>0|[1-9]\d*))?' \
+    '(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?' \
+    '(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?' \
+    '(?:-(?P<releasenotes>(?:rn\.[1-9]\d*))+)?$'
 VMN_REGEX = \
     '^(?P<major>0|[1-9]\d*)\.' \
     '(?P<minor>0|[1-9]\d*)\.' \
     '(?P<patch>0|[1-9]\d*)' \
-    '(?:\D(?P<hotfix>0|[1-9]\d*))?' \
-    '(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?' \
-    '(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
+    '(?:\.(?P<hotfix>0|[1-9]\d*))?' \
+    '(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?$'
+#TODO: create an abstraction layer on top of tag names versus the actual Semver versions
 VMN_TAG_REGEX = \
-    '(?P<app_name>[^\/]+)_(?P<major>0|[1-9]\d*)\.' \
+    '^(?P<app_name>[^\/]+)_(?P<major>0|[1-9]\d*)\.' \
     '(?P<minor>0|[1-9]\d*)\.' \
     '(?P<patch>0|[1-9]\d*)' \
-    '(?:\.(?P<hotfix>(?:0|[1-9]\d*))+)?' \
-    '(?:-(?P<prerelease>(?:pr\.[1-9]\d*))+)?' \
-    '(?:\+(?P<buildmetadata>(?:bm\.[1-9]\d*))+)?' \
+    '(?:\.(?P<hotfix>0|[1-9]\d*))?' \
+    '(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?' \
+    '(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?' \
     '(?:-(?P<releasenotes>(?:rn\.[1-9]\d*))+)?$'
+
 VMN_ROOT_TAG_REGEX = '(?P<app_name>[^\/]+)_(?P<version>0|[1-9]\d*)$'
 
 VMN_USER_NAME = 'vmn'
@@ -480,10 +490,10 @@ class GitBackend(VersionControlBackend):
             )
 
     def get_vmn_version_info(self, app_name):
-        formated_tag_name = VersionControlBackend.get_tag_formatted_app_name(
+        tag_formated_app_name = VersionControlBackend.get_tag_formatted_app_name(
             app_name
         )
-        app_tags = self.tags(filter=(f'{formated_tag_name}_*'))
+        app_tags = self.tags(filter=(f'{tag_formated_app_name}_*'))
 
         if not app_tags:
             return None
