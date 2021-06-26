@@ -34,7 +34,7 @@ class IVersionsStamper(object):
         self._repo_name = '.'
         self._should_publish = True
 
-        self._version_info_message = {
+        self.current_version_info = {
             'vmn_info': {
                 'description_message_version': '1.1',
                 'vmn_version': version_mod.version
@@ -80,7 +80,7 @@ class IVersionsStamper(object):
             self._prerelease_count = \
                 self.ver_info_form_repo['stamping']['app']["prerelease_count"]
 
-        self._version_info_message = {
+        self.current_version_info = {
             'vmn_info': {
                 'description_message_version': '1.1',
                 'vmn_version': version_mod.version
@@ -95,11 +95,11 @@ class IVersionsStamper(object):
         }
 
         if self.tracked and self._release_mode is None:
-            self._version_info_message['stamping']['app']['release_mode'] = \
+            self.current_version_info['stamping']['app']['release_mode'] = \
                 self.ver_info_form_repo['stamping']['app']['release_mode']
 
         if self._root_app_name is not None:
-            self._version_info_message['stamping']['root_app'] = {
+            self.current_version_info['stamping']['root_app'] = {
                 'name': self._root_app_name,
                 'latest_service': self._name,
                 'services': {},
@@ -124,8 +124,6 @@ class IVersionsStamper(object):
         prerelease = self._prerelease
         prerelease_count = copy.deepcopy(self._prerelease_count)
 
-        ret = {}
-
         # If user did not specify a change in prerelease,
         # stay with the previous one
         if prerelease is None:
@@ -136,25 +134,16 @@ class IVersionsStamper(object):
         if self._previous_prerelease != 'release' and self._release_mode is None:
             if counter_key not in prerelease_count:
                 prerelease_count[counter_key] = 0
-            prerelease_count[counter_key] += 1
 
-            ret['prerelease_count'] = copy.deepcopy(prerelease_count)
-            ret['prerelease'] = prerelease
+            prerelease_count[counter_key] += 1
         elif self._previous_prerelease != 'release' and self._release_mode is not None and prerelease != 'release':
             prerelease_count = {
                 counter_key: 1,
             }
-
-            ret['prerelease_count'] = copy.deepcopy(prerelease_count)
-            ret['prerelease'] = prerelease
         elif self._previous_prerelease == 'release' and prerelease != 'release':
             prerelease_count = {
                 counter_key: 1,
             }
-
-            ret['prerelease_count'] = prerelease_count
-            ret['prerelease'] = prerelease
-
         if self._release_mode == 'major':
             major = str(int(major) + 1)
             minor = str(0)
@@ -173,8 +162,7 @@ class IVersionsStamper(object):
         # TODO: ugly?
         prerelease_ver = None
         if not prerelease.startswith('release'):
-            prerelease_ver = \
-                prerelease + str(prerelease_count[counter_key])
+            prerelease_ver = f'{prerelease}{prerelease_count[counter_key]}'
 
         verstr = self.gen_vmn_version(
             major, minor, patch,
@@ -182,7 +170,7 @@ class IVersionsStamper(object):
             prerelease_ver
         )
 
-        return verstr, ret
+        return verstr, prerelease_count
 
     # TODO: similar logic may be used for diplsying user template on top of version
     def gen_vmn_version(self, major, minor, patch, hotfix=None, prerelease=None):
@@ -316,6 +304,10 @@ class VersionControlStamper(IVersionsStamper):
 
             found = True
             for k, v in ver_info['stamping']['app']['changesets'].items():
+                if ver_info['stamping']['app']['_version'] == ver_info['stamping']['app']['previous_version']:
+                    found = False
+                    continue
+
                 if k not in self.actual_deps_state:
                     found = False
                     break
@@ -330,10 +322,11 @@ class VersionControlStamper(IVersionsStamper):
                         break
                 elif v['hash'] != self.actual_deps_state[k]['hash']:
                     found = False
+                    #TODO: change to continue?
                     break
 
             if found:
-                return ver_info['stamping']['app']['_version']
+                return ver_info
 
         return None
 
@@ -467,17 +460,24 @@ class VersionControlStamper(IVersionsStamper):
             self,
             override_current_version=None,
     ):
-        matched_version = self.find_matching_version()
-        if matched_version == '0.0.0':
-            matched_version = None
+        matched_version_info = self.find_matching_version()
 
-        if matched_version is not None:
+        if matched_version_info is not None:
             # Good we have found an existing version matching
             # the actual_deps_state
             #TODO: why is it here?
             self._should_publish = False
 
-            return self.get_be_formatted_version(matched_version)
+            self.update_stamping_info(
+                matched_version_info['stamping']['app']['_version'],
+                matched_version_info['stamping']['app']['info'],
+                matched_version_info['stamping']['app']['previous_version'],
+                matched_version_info['stamping']['app']['prerelease_count'],
+            )
+
+            return self.get_be_formatted_version(
+                matched_version_info['stamping']['app']['_version']
+            )
 
         version_to_start_from = self.get_version_number_from_file()
         if override_current_version is None:
@@ -485,10 +485,9 @@ class VersionControlStamper(IVersionsStamper):
 
         # TODO:: optimization find max here
         # TODO: verify that can be called multiple times with same result
-        current_version, ret = self.gen_app_version(
+        current_version, prerelease_count = self.gen_app_version(
             override_current_version,
         )
-        self._version_info_message['stamping']['app'].update(ret)
 
         VersionControlStamper.write_version_to_file(
             file_path=self._version_file_path,
@@ -511,21 +510,39 @@ class VersionControlStamper(IVersionsStamper):
         if self._extra_info:
             info['env'] = dict(os.environ)
 
-        self.update_stamping_info(current_version, info, version_to_start_from)
+        self.update_stamping_info(
+            current_version,
+            info,
+            version_to_start_from,
+            prerelease_count
+        )
 
         return current_version
 
-    def update_stamping_info(self, current_version, info, version_to_start_from):
-        self._version_info_message['stamping']['app']['version'] = \
-            stamp_utils.VersionControlBackend.get_utemplate_formatted_version(current_version, self.template)
-        self._version_info_message['stamping']['app']['_version'] = \
+    def update_stamping_info(self, current_version, info, version_to_start_from, prerelease_count):
+        match = re.search(
+            stamp_utils.VMN_REGEX,
             current_version
-        self._version_info_message['stamping']['app']['previous_version'] = \
+        )
+
+        gdict = match.groupdict()
+        prerelease = 'release'
+        if gdict['prerelease'] is not None:
+            prerelease = gdict['prerelease']
+
+        self.current_version_info['stamping']['app']['version'] = \
+            stamp_utils.VersionControlBackend.get_utemplate_formatted_version(current_version, self.template)
+        self.current_version_info['stamping']['app']['_version'] = \
+            current_version
+        self.current_version_info['stamping']['app']['prerelease'] = prerelease
+        self.current_version_info['stamping']['app']['previous_version'] = \
             version_to_start_from
-        self._version_info_message['stamping']['app']['info'] = \
-            info
-        self._version_info_message['stamping']['app']['stamped_on_branch'] = \
+        self.current_version_info['stamping']['app']['info'] = \
+            copy.deepcopy(info)
+        self.current_version_info['stamping']['app']['stamped_on_branch'] = \
             self.backend.get_active_branch()
+        self.current_version_info['stamping']['app']['prerelease_count'] = \
+            copy.deepcopy(prerelease_count)
 
     def stamp_root_app_version(
             self,
@@ -563,14 +580,14 @@ class VersionControlStamper(IVersionsStamper):
         root_app = self.ver_info_form_repo['stamping']['root_app']
         services = copy.deepcopy(root_app['services'])
 
-        self._version_info_message['stamping']['root_app'].update({
+        self.current_version_info['stamping']['root_app'].update({
             'version': root_version,
             'services': services,
             'external_services': external_services
         })
 
-        msg_root_app = self._version_info_message['stamping']['root_app']
-        msg_app = self._version_info_message['stamping']['app']
+        msg_root_app = self.current_version_info['stamping']['root_app']
+        msg_app = self.current_version_info['stamping']['app']
         msg_root_app['services'][self._name] = msg_app['_version']
 
         return '{0}'.format(root_version)
@@ -606,20 +623,20 @@ class VersionControlStamper(IVersionsStamper):
             if tmp:
                 version_files.extend(tmp)
 
-        self._version_info_message['stamping']['msg'] = \
+        self.current_version_info['stamping']['msg'] = \
             '{0}: Stamped version {1}\n\n'.format(
                 self._name, app_version
             )
         self.backend.commit(
-            message=self._version_info_message['stamping']['msg'],
+            message=self.current_version_info['stamping']['msg'],
             user='vmn',
             include=version_files
         )
 
         app_msg = {
-            'vmn_info': self._version_info_message['vmn_info'],
+            'vmn_info': self.current_version_info['vmn_info'],
             'stamping': {
-                'app': self._version_info_message['stamping']['app']
+                'app': self.current_version_info['stamping']['app']
             }
         }
 
@@ -632,7 +649,7 @@ class VersionControlStamper(IVersionsStamper):
         if self._root_app_name is not None:
             root_app_msg = {
                 'stamping': {
-                    'root_app': self._version_info_message['stamping']['root_app']
+                    'root_app': self.current_version_info['stamping']['root_app']
                 }
             }
             msgs.append(root_app_msg)
@@ -845,14 +862,14 @@ def init_app(versions_be_ifc, params, starting_version):
             root_app = ver_info['stamping']['root_app']
             services = copy.deepcopy(root_app['services'])
 
-        versions_be_ifc._version_info_message['stamping']['root_app'].update({
+        versions_be_ifc.current_version_info['stamping']['root_app'].update({
             'version': root_app_version,
             'services': services,
             'external_services': external_services
         })
 
         info = {}
-        versions_be_ifc.update_stamping_info(starting_version, info, starting_version)
+        versions_be_ifc.update_stamping_info(starting_version, info, starting_version, {})
 
     err = versions_be_ifc.publish_stamp(starting_version, root_app_version)
     if err:
