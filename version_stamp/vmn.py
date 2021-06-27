@@ -410,13 +410,6 @@ class VersionControlStamper(IVersionsStamper):
         if 'prerelease' not in gdict:
             raise RuntimeError("Wrong version format specified. Can release only rc versions")
 
-        #if self.backend.changeset() != self.backend.changeset(tag=tag_name):
-        #    raise RuntimeError(
-        #        'Releasing a release candidate is only possible when the repository '
-        #        'state is on the exact version. Please vmn goto the version you\'d '
-        #        'like to release.'
-        #    )
-
         props = \
             stamp_utils.VersionControlBackend.get_tag_properties(
                 tag_name
@@ -459,26 +452,6 @@ class VersionControlStamper(IVersionsStamper):
             self,
             override_current_version=None,
     ):
-        matched_version_info = self.find_matching_version()
-
-        if matched_version_info is not None:
-            # Good we have found an existing version matching
-            # the actual_deps_state
-            #TODO: why is it here?
-            self._should_publish = False
-
-            self.update_stamping_info(
-                matched_version_info['stamping']['app']['_version'],
-                matched_version_info['stamping']['app']['info'],
-                matched_version_info['stamping']['app']['previous_version'],
-                matched_version_info['stamping']['app']['release_mode'],
-                matched_version_info['stamping']['app']['prerelease_count'],
-            )
-
-            return self.get_be_formatted_version(
-                matched_version_info['stamping']['app']['_version']
-            )
-
         version_to_start_from = self.get_version_number_from_file()
         if override_current_version is None:
             override_current_version = version_to_start_from
@@ -692,19 +665,29 @@ class VersionControlStamper(IVersionsStamper):
 
 
 def _init(args, params):
+    #TODO: add context manager for every function
     vcs = VersionControlStamper(params)
-    #TODO: refactor
+
     err = _safety_validation(vcs)
     if err:
         del vcs
+
         return err
 
     be = vcs.backend
 
     if args.name is None:
-        if vcs.tracked:
+        if os.path.isdir('{0}/.vmn'.format(params['root_path'])):
             LOGGER.info('vmn tracking is already initialized')
+            del vcs
+
             return 1
+
+        err = _safety_validation(vcs)
+        if err:
+            del vcs
+
+            return err
 
         changeset = be.changeset()
 
@@ -726,7 +709,12 @@ def _init(args, params):
 
         LOGGER.info('Initialized vmn tracking on {0}'.format(params['root_path']))
     else:
-        init_app(vcs, params, args.version)
+        err = _init_app(vcs, params, args.version)
+        if err:
+            del vcs
+
+            return err
+
         LOGGER.info('Initialized app tracking on {0}'.format(params['root_app_dir_path']))
 
     del vcs
@@ -763,10 +751,19 @@ def _safety_validation(
     return err
 
 
-def init_app(versions_be_ifc, params, starting_version):
+def _init_app(versions_be_ifc, params, starting_version):
+    if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
+        LOGGER.info('vmn tracking is not yet initialized')
+        return 1
+
+    err = _safety_validation(versions_be_ifc)
+    if err:
+        return err
+
     if versions_be_ifc.tracked:
-        # TODO: exit with proper error message
-        raise RuntimeError("Will not init an already tracked app")
+        LOGGER.info('Will not init an already tracked app')
+
+        return 1
 
     versions_be_ifc.create_config_files(params)
     VersionControlStamper.write_version_to_file(
@@ -808,15 +805,7 @@ def init_app(versions_be_ifc, params, starting_version):
     return 0
 
 
-def stamp_release(versions_be_ifc):
-    if versions_be_ifc._previous_prerelease == 'release' and versions_be_ifc._release_mode is None:
-        raise RuntimeError(
-            'When stamping from a previous release version '
-            'a release mode must be specified'
-        )
-
-
-def get_version(versions_be_ifc, pull):
+def _stamp_version(versions_be_ifc, pull):
     if pull:
         versions_be_ifc.retrieve_remote_changes()
 
@@ -1260,7 +1249,7 @@ def build_world(name, working_dir, root=False):
 
 
 def main(command_line=None):
-    args = parse_user_commands(command_line)
+    args = _parse_user_commands(command_line)
 
     cwd = os.getcwd()
     if 'VMN_WORKING_DIR' in os.environ:
@@ -1357,12 +1346,26 @@ def _handle_stamp(args, params):
         LOGGER.info('vmn tracking is not yet initialized')
         return 1
 
+    matched_version_info = vcs.find_matching_version()
+    if matched_version_info is not None:
+        # Good we have found an existing version matching
+        # the actual_deps_state
+
+        version = vcs.get_be_formatted_version(
+            matched_version_info['stamping']['app']['_version']
+        )
+
+        LOGGER.info(version)
+        del vcs
+
+        return 0
+
     err = _safety_validation(vcs)
     if err:
         return err
 
     try:
-        version = get_version(vcs, args.pull)
+        version = _stamp_version(vcs, args.pull)
     except Exception as exc:
         LOGGER.exception('Logged Exception message:')
 
@@ -1403,16 +1406,17 @@ def _handle_add(args, params):
     vcs = VersionControlStamper(params)
     err = _safety_validation(vcs, allow_detached_head=True)
     if err:
+        del vcs
+
         return err
 
     try:
-        version = vcs.release_app_version()
+        raise NotImplementedError('Adding metadata to versions is not supported yet')
     except Exception as exc:
         LOGGER.exception('Logged Exception message:')
 
         return 1
 
-    LOGGER.info(version)
     del vcs
 
     return err
@@ -1428,12 +1432,6 @@ def _handle_show(LOGGER, args, params):
     LOGGER.disabled = False
     version = args.version
 
-    # TODO: check version with VMN_REGEX
-    # TODO: handle cmd specific params differently
-    # all this should be vmn internal to semver pr1 bm4 params
-    #params['prerelease'] = args.mode
-    #params['buildmetadata'] = args.build_metadata
-
     vcs = VersionControlStamper(params)
     err = _safety_validation(vcs, allow_detached_head=True)
     if err:
@@ -1447,7 +1445,7 @@ def _handle_show(LOGGER, args, params):
     return err
 
 
-def parse_user_commands(command_line):
+def _parse_user_commands(command_line):
     parser = argparse.ArgumentParser('vmn')
     parser.add_argument(
         '--version', '-v',
