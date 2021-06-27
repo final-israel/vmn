@@ -540,17 +540,12 @@ class GitBackend(VersionControlBackend):
 
             # TODO:: Check API commit version
 
-        if 'version' not in all_tags:
-            version_info = yaml.safe_load(all_tags['prerelease']['message'])
-        else:
-            version_info = yaml.safe_load(all_tags['version']['message'])
-
         if 'root' in all_tags:
-            version_info['stamping'].update(
+            tag_msg['stamping'].update(
                 yaml.safe_load(all_tags['root']['message'])['stamping']
             )
 
-        return version_info
+        return tag_msg
 
     @staticmethod
     def clone(path, remote):

@@ -734,79 +734,6 @@ def _init(args, params):
     return err
 
 
-def show(vcs, params, version=None):
-    be = vcs.backend
-
-    if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
-        LOGGER.error('vmn tracking is not yet initialized')
-        return 1
-
-    if version is not None:
-        if params['root']:
-            try:
-                int(version)
-            except Exception:
-                LOGGER.error(
-                    'wrong version specified: root version '
-                    'must be an integer'
-                    )
-
-                return 1
-        else:
-            match = re.search(
-                stamp_utils.VMN_REGEX,
-                version
-            )
-            if match is None:
-                LOGGER.error(
-                    f'Wrong version specified: {version}'
-                )
-
-                return 1
-
-    # TODO: get tag name from version
-    tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
-        params['name'],
-        version,
-    )
-
-    if version is None:
-        ver_info = vcs.backend.get_vmn_version_info(params['name'])
-    else:
-        ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
-
-    if ver_info is None:
-        LOGGER.error(
-            'Version information was not found '
-            'for {0}.'.format(
-                params['name'],
-            )
-        )
-
-        return 1
-
-    data = ver_info['stamping']['app']
-    if params['root']:
-        data = ver_info['stamping']['root_app']
-        if not data:
-            LOGGER.error(
-                'App {0} does not have a root app '.format(
-                    params['name'],
-                )
-            )
-
-            return 1
-
-    if params.get('verbose'):
-        yaml.dump(data, sys.stdout)
-    elif params.get('raw'):
-        print(data['_version'])
-    else:
-        print(data['version'])
-
-    return 0
-
-
 def _safety_validation(
         versions_be_ifc,
         allow_detached_head=False):
@@ -956,50 +883,47 @@ def get_version(versions_be_ifc, pull):
     return versions_be_ifc.get_be_formatted_version(current_version)
 
 
-def goto_version(vcs, params, version):
-    be = vcs.backend
+def show(vcs, params, version=None):
+    tag_name, ver_info = _retrieve_version_info(params, vcs, version)
 
-    if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
-        LOGGER.info('vmn tracking is not yet initialized')
+    if ver_info is None:
+        LOGGER.error('No such app: {0}'.format(params['name']))
         return 1
 
-    err = _safety_validation(vcs, allow_detached_head=True)
-    if err:
-        return err
-
-    if version is not None:
-        if params['root']:
-            try:
-                int(version)
-            except Exception:
-                LOGGER.error(
-                    'wrong version specified: root version '
-                    'must be an integer'
-                    )
-
-                return 1
-        else:
-            match = re.search(
-                stamp_utils.VMN_REGEX,
-                version
+    if ver_info is None:
+        LOGGER.error(
+            'Version information was not found '
+            'for {0}.'.format(
+                params['name'],
             )
-            if match is None:
-                LOGGER.error(
-                    f'Wrong version specified: {version}'
+        )
+
+        return 1
+
+    data = ver_info['stamping']['app']
+    if params['root']:
+        data = ver_info['stamping']['root_app']
+        if not data:
+            LOGGER.error(
+                'App {0} does not have a root app '.format(
+                    params['name'],
                 )
+            )
 
-                return 1
+            return 1
 
-    # TODO: get tag name from version
-    tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
-        params['name'],
-        version,
-    )
-
-    if version is None:
-        ver_info = vcs.get_vmn_version_info(params['name'])
+    if params.get('verbose'):
+        yaml.dump(data, sys.stdout)
+    elif params.get('raw'):
+        print(data['_version'])
     else:
-        ver_info = vcs.get_vmn_tag_version_info(tag_name)
+        print(data['version'])
+
+    return 0
+
+
+def goto_version(vcs, params, version):
+    tag_name, ver_info = _retrieve_version_info(params, vcs, version)
 
     if ver_info is None:
         LOGGER.error('No such app: {0}'.format(params['name']))
@@ -1016,10 +940,10 @@ def goto_version(vcs, params, version):
         _goto_version(deps, params['root_path'])
 
     if version is None and not params['deps_only']:
-        be.checkout_branch()
+        vcs.backend.checkout_branch()
     elif not params['deps_only']:
         try:
-            be.checkout(tag=tag_name)
+            vcs.backend.checkout(tag=tag_name)
         except Exception:
             LOGGER.error(
                 'App: {0} with version: {1} was '
@@ -1031,6 +955,51 @@ def goto_version(vcs, params, version):
             return 1
 
     return 0
+
+
+def _retrieve_version_info(params, vcs, version):
+    if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
+        LOGGER.info('vmn tracking is not yet initialized')
+        return None, None
+
+    err = _safety_validation(vcs, allow_detached_head=True)
+    if err:
+        return None, None
+
+    if version is not None:
+        if params['root']:
+            try:
+                int(version)
+            except Exception:
+                LOGGER.error(
+                    'wrong version specified: root version '
+                    'must be an integer'
+                )
+
+                return None, None
+        else:
+            match = re.search(
+                stamp_utils.VMN_REGEX,
+                version
+            )
+            if match is None:
+                LOGGER.error(
+                    f'Wrong version specified: {version}'
+                )
+
+                return None, None
+
+    # TODO: get tag name from version
+    tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
+        params['name'],
+        version,
+    )
+    if version is None:
+        ver_info = vcs.get_vmn_version_info(params['name'])
+    else:
+        ver_info = vcs.get_vmn_tag_version_info(tag_name)
+
+    return tag_name, ver_info
 
 
 def _update_repo(args):
