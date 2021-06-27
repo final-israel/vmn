@@ -439,11 +439,6 @@ class VersionControlStamper(IVersionsStamper):
                     }
                 }
         ver_info['stamping']['app']['_version'] = props['version']
-        ver_info['stamping']['app']['version'] = \
-            stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
-                props['version'],
-                self.template
-            )
         ver_info['stamping']['app']['prerelease'] = 'release'
 
         messages = [
@@ -517,11 +512,6 @@ class VersionControlStamper(IVersionsStamper):
         if gdict['prerelease'] is not None:
             prerelease = gdict['prerelease']
 
-        self.current_version_info['stamping']['app']['version'] = \
-            stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
-                current_version,
-                self.template
-            )
         self.current_version_info['stamping']['app']['_version'] = \
             current_version
         self.current_version_info['stamping']['app']['prerelease'] = prerelease
@@ -922,7 +912,10 @@ def show(vcs, params, version=None):
     elif params.get('raw'):
         print(data['_version'])
     else:
-        print(data['version'])
+        print(stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
+            data['_version'],
+            vcs.template
+        ))
 
     return 0
 
@@ -1401,12 +1394,14 @@ def _handle_release(args, params):
     vcs = VersionControlStamper(params)
     err = _safety_validation(vcs, allow_detached_head=True)
     if err:
+        del vcs
         return err
 
     try:
         version = vcs.release_app_version(version)
     except Exception as exc:
         LOGGER.exception('Logged Exception message:')
+        del vcs
 
         return 1
 
@@ -1479,14 +1474,15 @@ def _parse_user_commands(command_line):
     subprasers = parser.add_subparsers(dest='command')
     pinit = subprasers.add_parser(
         'init',
-        help='initialize version tracking for the repository. '
-             'This command should be called only once'
+        help='initialize version tracking for the repository or an application. '
+             'This command should be called only once per repository or an '
+             'application respectively'
     )
     pinit.add_argument(
         '-v', '--version',
         default='0.0.0',
-        help=f"The version to init from. Must be specified in the raw version format:"
-             " {major}.{minor}.{patch}"
+        help="The version to init from. Must be specified in the raw version format: "
+             "{major}.{minor}.{patch}"
 
     )
     pinit.add_argument(
@@ -1557,7 +1553,6 @@ def _parse_user_commands(command_line):
     prelease.add_argument(
         '-v', '--version',
         required=True,
-        # TODO: should not have rn here
         help=f"The version to release in the format: "
              f" {stamp_utils.VMN_VERSION_FORMAT}"
     )
@@ -1569,13 +1564,21 @@ def _parse_user_commands(command_line):
         help='add attributes to existing app version'
     )
     padd.add_argument(
+        '-t', '--type',
+        choices=['build', 'releasenotes'],
+        required=True,
+        help='build / releasenotes'
+    )
+    padd.add_argument(
         '-v', '--version',
         required=True,
         help=f"The version to add to in the format: "
              f" {stamp_utils.VMN_VERSION_FORMAT}"
     )
     padd.add_argument(
-        'name', help="The application's name"
+        'name',
+        required=True,
+        help="The application's name"
     )
     args = parser.parse_args(command_line)
 
