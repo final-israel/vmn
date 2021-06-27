@@ -61,8 +61,7 @@ class IVersionsStamper(object):
         self._version_file_path = '{}/{}'.format(
             self._app_dir_path, VER_FILE_NAME)
 
-        self.template = \
-            IVersionsStamper.parse_template(conf['template'])
+        self.template = IVersionsStamper.parse_template(conf['template'])
 
         self._raw_configured_deps = conf['raw_configured_deps']
         self.actual_deps_state = conf["actual_deps_state"]
@@ -109,6 +108,7 @@ class IVersionsStamper(object):
     def __del__(self):
         del self.backend
 
+    # Note: this function generates version up until prerelease
     def gen_app_version(self, current_version):
         match = re.search(
             stamp_utils.VMN_REGEX,
@@ -187,7 +187,14 @@ class IVersionsStamper(object):
 
     @staticmethod
     def parse_template(template: str) -> None:
-        return template
+        match = re.search(
+            stamp_utils.VMN_TEMPLATE_REGEX,
+            template
+        )
+
+        gdict = match.groupdict()
+
+        return gdict
 
     @staticmethod
     def write_version_to_file(file_path: str, version_number: str) -> None:
@@ -223,7 +230,10 @@ class IVersionsStamper(object):
         return flat_dependency_repos
 
     def get_be_formatted_version(self, version):
-        return stamp_utils.VersionControlBackend.get_utemplate_formatted_version(version, self.template)
+        return stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
+            version,
+            self.template
+        )
 
     def find_matching_version(self):
         raise NotImplementedError('Please implement this method')
@@ -430,7 +440,10 @@ class VersionControlStamper(IVersionsStamper):
                 }
         ver_info['stamping']['app']['_version'] = props['version']
         ver_info['stamping']['app']['version'] = \
-            stamp_utils.VersionControlBackend.get_utemplate_formatted_version(props['version'], self.template)
+            stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
+                props['version'],
+                self.template
+            )
         ver_info['stamping']['app']['prerelease'] = 'release'
 
         messages = [
@@ -505,7 +518,10 @@ class VersionControlStamper(IVersionsStamper):
             prerelease = gdict['prerelease']
 
         self.current_version_info['stamping']['app']['version'] = \
-            stamp_utils.VersionControlBackend.get_utemplate_formatted_version(current_version, self.template)
+            stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
+                current_version,
+                self.template
+            )
         self.current_version_info['stamping']['app']['_version'] = \
             current_version
         self.current_version_info['stamping']['app']['prerelease'] = prerelease
@@ -984,9 +1000,9 @@ def _retrieve_version_info(params, vcs, version):
         version,
     )
     if version is None:
-        ver_info = vcs.get_vmn_version_info(params['name'])
+        ver_info = vcs.backend.get_vmn_version_info(params['name'])
     else:
-        ver_info = vcs.get_vmn_tag_version_info(tag_name)
+        ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
 
     return tag_name, ver_info
 
@@ -1212,7 +1228,9 @@ def build_world(name, working_dir, root=False):
         }
     }
 
-    params['template'] = '{major}.{minor}.{patch}'
+    params['template'] = \
+        '[{major}][.{minor}][.{patch}][.{hotfix}]' \
+        '[-{prerelease}][+{buildmetadata}][-{releasenotes}]'
 
     params["extra_info"] = False
     # TODO: handle redundant parse template here

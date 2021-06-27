@@ -23,7 +23,7 @@ SEMVER_REGEX = \
     '(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?' \
     '(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
 # Regex for matching versions stamped by vmn
-VMN_REGEX_FULL = \
+VMN_REGEX = \
     '^(?P<major>0|[1-9]\d*)\.' \
     '(?P<minor>0|[1-9]\d*)\.' \
     '(?P<patch>0|[1-9]\d*)' \
@@ -31,13 +31,6 @@ VMN_REGEX_FULL = \
     '(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?' \
     '(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?' \
     '(?:-(?P<releasenotes>(?:rn\.[1-9]\d*))+)?$'
-# VMN Version regex
-VMN_REGEX = \
-    '^(?P<major>0|[1-9]\d*)\.' \
-    '(?P<minor>0|[1-9]\d*)\.' \
-    '(?P<patch>0|[1-9]\d*)' \
-    '(?:\.(?P<hotfix>0|[1-9]\d*))?' \
-    '(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?$'
 #TODO: create an abstraction layer on top of tag names versus the actual Semver versions
 VMN_TAG_REGEX = \
     '^(?P<app_name>[^\/]+)_(?P<major>0|[1-9]\d*)\.' \
@@ -49,6 +42,15 @@ VMN_TAG_REGEX = \
     '(?:-(?P<releasenotes>(?:rn\.[1-9]\d*))+)?$'
 
 VMN_ROOT_TAG_REGEX = '(?P<app_name>[^\/]+)_(?P<version>0|[1-9]\d*)$'
+
+VMN_TEMPLATE_REGEX = \
+    '^(?:\[(?P<major_template>[^\{\}]*\{major\}[^\{\}]*)\])?' \
+    '(?:\[(?P<minor_template>[^\{\}]*\{minor\}[^\{\}]*)\])?' \
+    '(?:\[(?P<patch_template>[^\{\}]*\{patch\}[^\{\}]*)\])?' \
+    '(?:\[(?P<hotfix_template>[^\{\}]*\{hotfix\}[^\{\}]*)\])?' \
+    '(?:\[(?P<prerelease_template>[^\{\}]*\{prerelease\}[^\{\}]*)\])?' \
+    '(?:\[(?P<buildmetadata_template>[^\{\}]*\{buildmetadata\}[^\{\}]*)\])?' \
+    '(?:\[(?P<releasenotes_template>[^\{\}]*\{releasenotes\}[^\{\}]*)\])?$'
 
 VMN_USER_NAME = 'vmn'
 LOGGER = None
@@ -212,11 +214,18 @@ class VersionControlBackend(object):
         if gdict['hotfix'] == '0':
             gdict['hotfix'] = None
 
-        formatted_version = template.format(
-            major=gdict['major'],
-            minor=gdict['minor'],
-            patch=gdict['patch']
+        octats = (
+            'major', 'minor', 'patch', 'hotfix', 'prerelease',
+            'buildmetadata', 'releasenotes'
         )
+
+        formatted_version = ''
+        for octat in octats:
+            if f'{octat}_template' in template and gdict[octat] is not None:
+                d = {octat: gdict[octat]}
+                formatted_version = \
+                    f"{formatted_version}" \
+                    f"{template[f'{octat}_template'].format(**d)}"
 
         return formatted_version
 
