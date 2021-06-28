@@ -16,7 +16,7 @@ def test_basic_stamp(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
     assert len(params['actual_deps_state']) == 1
-    vmn._init(params)
+    vmn._handle_init(params)
 
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
@@ -76,7 +76,7 @@ def test_basic_show(app_layout, capfd):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
     assert len(params['actual_deps_state']) == 1
-    vmn._init(params)
+    vmn._handle_init(params)
 
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
@@ -122,7 +122,7 @@ def test_multi_repo_dependency(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
     assert len(params['actual_deps_state']) == 1
-    vmn._init(params)
+    vmn._handle_init(params)
 
     params['release_mode'] = 'patch'
     params['prerelease'] = 'release'
@@ -187,7 +187,7 @@ def test_goto_deleted_repos(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
     assert len(params['actual_deps_state']) == 1
-    vmn._init(params)
+    vmn._handle_init(params)
 
     params['release_mode'] = 'patch'
     params['prerelease'] = 'release'
@@ -244,7 +244,7 @@ def test_basic_root_stamp(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world('root_app/app1', params['working_dir'])
     assert len(params['actual_deps_state']) == 1
-    vmn._init(params)
+    vmn._handle_init(params)
 
     params['release_mode'] = 'patch'
     params['prerelease'] = 'release'
@@ -281,7 +281,7 @@ def test_starting_version(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
     assert len(params['actual_deps_state']) == 1
-    vmn._init(params)
+    vmn._handle_init(params)
 
     params['release_mode'] = 'minor'
     params['prerelease'] = 'release'
@@ -299,7 +299,7 @@ def test_rc_stamping(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
     assert len(params['actual_deps_state']) == 1
-    vmn._init(params)
+    vmn._handle_init(params)
 
     params['prerelease'] = 'rc'
     params['buildmetadata'] = None
@@ -371,7 +371,7 @@ def test_rc_stamping(app_layout):
 def test_version_template(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    vmn._init(params)
+    vmn._handle_init(params)
 
     params['release_mode'] = 'minor'
     params['prerelease'] = 'release'
@@ -503,7 +503,7 @@ def test_basic_goto(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
     assert len(params['actual_deps_state']) == 1
-    vmn._init(params)
+    vmn._handle_init(params)
 
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
@@ -551,7 +551,7 @@ def test_stamp_on_branch_merge_squash(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
     assert len(params['actual_deps_state']) == 1
-    vmn._init(params)
+    vmn._handle_init(params)
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['prerelease'] = 'release'
@@ -587,7 +587,7 @@ def test_stamp_on_branch_merge_squash(app_layout):
 def test_get_version(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    vmn._init(params)
+    vmn._handle_init(params)
     params['release_mode'] = 'patch'
     params['prerelease'] = 'release'
     params['buildmetadata'] = None
@@ -610,7 +610,7 @@ def test_get_version(app_layout):
 def test_get_version_number_from_file(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    vmn._init(params)
+    vmn._handle_init(params)
     params['release_mode'] = 'patch'
     params['prerelease'] = 'release'
     params['buildmetadata'] = None
@@ -625,7 +625,7 @@ def test_get_version_number_from_file(app_layout):
 def test_read_version_from_file(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    vmn._init(params)
+    vmn._handle_init(params)
     params['release_mode'] = 'patch'
     params['prerelease'] = 'release'
     params['buildmetadata'] = None
@@ -644,7 +644,7 @@ def test_read_version_from_file(app_layout):
 def test_system_backward_comp_file_vs_commit(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    vmn._init(params)
+    vmn._handle_init(params)
     params['release_mode'] = 'patch'
     params['prerelease'] = 'release'
     params['buildmetadata'] = None
@@ -667,7 +667,7 @@ def test_system_backward_comp_file_vs_commit(app_layout):
 def test_manual_file_adjustment(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    vmn._init(params)
+    vmn._handle_init(params)
     params['release_mode'] = 'patch'
     params['prerelease'] = 'release'
     params['buildmetadata'] = None
@@ -690,7 +690,7 @@ def test_manual_file_adjustment(app_layout):
 def test_basic_root_show(app_layout,capfd):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world('root_app/app1', params['working_dir'])
-    vmn._init(params)
+    vmn._handle_init(params)
 
     params['release_mode'] = 'patch'
     params['prerelease'] = 'release'

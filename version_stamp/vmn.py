@@ -670,9 +670,17 @@ class VersionControlStamper(IVersionsStamper):
         self.backend.pull()
 
 
-def _init(args, params):
+def _handle_init(args, params):
     #TODO: add context manager for every function
     vcs = VersionControlStamper(params)
+
+    be = vcs.backend
+
+    if os.path.isdir('{0}/.vmn'.format(params['root_path'])):
+        LOGGER.info('vmn tracking is already initialized')
+        del vcs
+
+        return 1
 
     err = _safety_validation(vcs)
     if err:
@@ -680,48 +688,41 @@ def _init(args, params):
 
         return err
 
-    be = vcs.backend
+    changeset = be.changeset()
 
-    if args.name is None:
-        if os.path.isdir('{0}/.vmn'.format(params['root_path'])):
-            LOGGER.info('vmn tracking is already initialized')
-            del vcs
+    vmn_path = os.path.join(params['root_path'], '.vmn')
+    Path(vmn_path).mkdir(parents=True, exist_ok=True)
+    vmn_unique_path = os.path.join(vmn_path, changeset)
+    Path(vmn_unique_path).touch()
+    git_ignore_path = os.path.join(vmn_path, '.gitignore')
 
-            return 1
+    with open(git_ignore_path, 'w+') as f:
+        f.write('vmn.lock{0}'.format(os.linesep))
 
-        err = _safety_validation(vcs)
-        if err:
-            del vcs
+    be.commit(
+        message=stamp_utils.INIT_COMMIT_MESSAGE,
+        user='vmn',
+        include=[vmn_path, vmn_unique_path, git_ignore_path]
+    )
+    be.push()
 
-            return err
+    LOGGER.info('Initialized vmn tracking on {0}'.format(params['root_path']))
 
-        changeset = be.changeset()
+    del vcs
 
-        vmn_path = os.path.join(params['root_path'], '.vmn')
-        Path(vmn_path).mkdir(parents=True, exist_ok=True)
-        vmn_unique_path = os.path.join(vmn_path, changeset)
-        Path(vmn_unique_path).touch()
-        git_ignore_path = os.path.join(vmn_path, '.gitignore')
+    return err
 
-        with open(git_ignore_path, 'w+') as f:
-            f.write('vmn.lock{0}'.format(os.linesep))
 
-        be.commit(
-            message=stamp_utils.INIT_COMMIT_MESSAGE,
-            user='vmn',
-            include=[vmn_path, vmn_unique_path, git_ignore_path]
-        )
-        be.push()
+def _handle_init_app(args, params):
+    vcs = VersionControlStamper(params)
 
-        LOGGER.info('Initialized vmn tracking on {0}'.format(params['root_path']))
-    else:
-        err = _init_app(vcs, params, args.version)
-        if err:
-            del vcs
+    err = _init_app(vcs, params, args.version)
+    if err:
+        del vcs
 
-            return err
+        return err
 
-        LOGGER.info('Initialized app tracking on {0}'.format(params['root_app_dir_path']))
+    LOGGER.info('Initialized app tracking on {0}'.format(params['root_app_dir_path']))
 
     del vcs
 
@@ -801,8 +802,8 @@ def _init_app(versions_be_ifc, params, starting_version):
             'external_services': external_services
         })
 
-        info = {}
-        versions_be_ifc.update_stamping_info(starting_version, info, starting_version, 'init', {})
+    info = {}
+    versions_be_ifc.update_stamping_info(starting_version, info, starting_version, 'init', {})
 
     err = versions_be_ifc.publish_stamp(starting_version, root_app_version)
     if err:
@@ -1302,8 +1303,10 @@ def main(command_line=None):
     with lock:
         LOGGER.info('Locked: {0}'.format(lock_file_path))
         if args.command == 'init':
-            err = _init(args, params)
-        if args.command == 'show':
+            err = _handle_init(args, params)
+        elif args.command == 'init-app':
+            err = _handle_init_app(args, params)
+        elif args.command == 'show':
             err = _handle_show(LOGGER, args, params)
         elif args.command == 'stamp':
             err = _handle_stamp(args, params)
@@ -1478,16 +1481,22 @@ def _parse_user_commands(command_line):
              'This command should be called only once per repository or an '
              'application respectively'
     )
-    pinit.add_argument(
+    pinitapp = subprasers.add_parser(
+        'init-app',
+        help='initialize version tracking for the repository or an application. '
+             'This command should be called only once per repository or an '
+             'application respectively'
+    )
+    pinitapp.add_argument(
         '-v', '--version',
         default='0.0.0',
         help="The version to init from. Must be specified in the raw version format: "
              "{major}.{minor}.{patch}"
 
     )
-    pinit.add_argument(
+    pinitapp.add_argument(
         '--name',
-        default=None,
+        required=True,
         help="The application's name to initialize version tracking for"
     )
     pshow = subprasers.add_parser(
@@ -1577,7 +1586,6 @@ def _parse_user_commands(command_line):
     )
     padd.add_argument(
         'name',
-        required=True,
         help="The application's name"
     )
     args = parser.parse_args(command_line)
