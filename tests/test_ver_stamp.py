@@ -17,12 +17,12 @@ def test_basic_stamp(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     assert len(params['actual_deps_state']) == 1
     vmn._handle_init(params)
+    vmn._handle_init_app(params)
 
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['prerelease'] = 'release'
     params['buildmetadata'] = None
-    params['starting_version'] = '0.0.0'
     vcs = vmn.VersionControlStamper(params)
     vmn.stamp(vcs, params)
 

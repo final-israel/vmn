@@ -170,7 +170,7 @@ class IVersionsStamper(object):
             prerelease_ver
         )
 
-        return verstr, prerelease_count
+        return verstr, prerelease, prerelease_count
 
     # TODO: similar logic may be used for diplsying user template on top of version
     def gen_vmn_version(self, major, minor, patch, hotfix=None, prerelease=None):
@@ -466,9 +466,10 @@ class VersionControlStamper(IVersionsStamper):
 
         # TODO:: optimization find max here
         # TODO: verify that can be called multiple times with same result
-        current_version, prerelease_count = self.gen_app_version(
-            override_current_version,
-        )
+        current_version, prerelease, prerelease_count = \
+            self.gen_app_version(
+                override_current_version,
+            )
 
         VersionControlStamper.write_version_to_file(
             file_path=self._version_file_path,
@@ -491,27 +492,25 @@ class VersionControlStamper(IVersionsStamper):
         if self._extra_info:
             info['env'] = dict(os.environ)
 
+        release_mode = self._release_mode
+        if release_mode is None:
+            release_mode = 'prerelease'
+
         self.update_stamping_info(
             current_version,
             info,
             version_to_start_from,
-            self._release_mode,
+            release_mode,
+            prerelease,
             prerelease_count
         )
 
         return current_version
 
-    def update_stamping_info(self, current_version, info, version_to_start_from, release_mode, prerelease_count):
-        match = re.search(
-            stamp_utils.VMN_REGEX,
-            current_version
-        )
-
-        gdict = match.groupdict()
-        prerelease = 'release'
-        if gdict['prerelease'] is not None:
-            prerelease = gdict['prerelease']
-
+    def update_stamping_info(
+            self, current_version, info,
+            version_to_start_from, release_mode,
+            prerelease, prerelease_count):
         self.current_version_info['stamping']['app']['_version'] = \
             current_version
         self.current_version_info['stamping']['app']['prerelease'] = prerelease
@@ -803,7 +802,14 @@ def _init_app(versions_be_ifc, params, starting_version):
         })
 
     info = {}
-    versions_be_ifc.update_stamping_info(starting_version, info, starting_version, 'init', {})
+    versions_be_ifc.update_stamping_info(
+        starting_version,
+        info,
+        starting_version,
+        'init',
+        'release',
+        {}
+    )
 
     err = versions_be_ifc.publish_stamp(starting_version, root_app_version)
     if err:
@@ -1331,16 +1337,8 @@ def validate_app_name(args):
 
 
 def _handle_goto(args, params):
-    params['prerelease'] = args.mode
-    params['buildmetadata'] = args.build_metadata
     version = args.version
-    if version is not None and \
-            args.mode is not None and \
-            args.mode_version is not None:
-        version = f'{version}_{args.mode}-{args.mode_version}'
 
-    if version is not None and args.build_metadata is not None:
-        version = f'{version}+{args.build_metadata}'
     # TODO: check version with VMN_REGEX
     params['deps_only'] = args.deps_only
 
