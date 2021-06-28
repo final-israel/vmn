@@ -1493,8 +1493,7 @@ def _parse_user_commands(command_line):
 
     )
     pinitapp.add_argument(
-        '--name',
-        required=True,
+        'name',
         help="The application's name to initialize version tracking for"
     )
     pshow = subprasers.add_parser(
