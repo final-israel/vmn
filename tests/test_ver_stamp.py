@@ -13,6 +13,7 @@ vmn.LOGGER = stamp_utils.init_stamp_logger(True)
 
 
 def test_basic_stamp(app_layout):
+    vmn.vmn_run(['init'])
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
     assert len(params['actual_deps_state']) == 1

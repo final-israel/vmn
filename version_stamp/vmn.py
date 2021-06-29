@@ -23,6 +23,32 @@ import version as version_mod
 LOGGER = stamp_utils.init_stamp_logger()
 
 
+class VMNContextMAnagerManager(object):
+    def __init__(self, params):
+        vmn_path = os.path.join(params['root_path'], '.vmn')
+        lock_file_path = os.path.join(vmn_path, 'vmn.lock')
+        pathlib.Path(os.path.dirname(lock_file_path)).mkdir(
+            parents=True, exist_ok=True
+        )
+        self.lock = FileLock(lock_file_path)
+        self.params = params
+        self.vcs = None
+        self.lock_file_path = lock_file_path
+
+    def __enter__(self):
+        self.lock.acquire()
+        LOGGER.info('Locked: {0}'.format(self.lock_file_path))
+        self.vcs = VersionControlStamper(self.params)
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        if self.vcs is not None:
+            del self.vcs
+
+        self.lock.release()
+        LOGGER.info('Released locked: {0}'.format(self.lock_file_path))
+
+
 class IVersionsStamper(object):
     def __init__(self, conf):
         self._name = conf['name']
@@ -669,22 +695,16 @@ class VersionControlStamper(IVersionsStamper):
         self.backend.pull()
 
 
-def _handle_init(args, params):
-    #TODO: add context manager for every function
-    vcs = VersionControlStamper(params)
-
+def _handle_init(vcs, params):
     be = vcs.backend
 
     if os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.info('vmn tracking is already initialized')
-        del vcs
 
         return 1
 
     err = _safety_validation(vcs)
     if err:
-        del vcs
-
         return err
 
     changeset = be.changeset()
@@ -707,23 +727,15 @@ def _handle_init(args, params):
 
     LOGGER.info('Initialized vmn tracking on {0}'.format(params['root_path']))
 
-    del vcs
-
     return err
 
 
-def _handle_init_app(args, params):
-    vcs = VersionControlStamper(params)
-
-    err = _init_app(vcs, params, args.version)
+def _handle_init_app(vcs, params, version):
+    err = _init_app(vcs, params, version)
     if err:
-        del vcs
-
         return err
 
     LOGGER.info('Initialized app tracking on {0}'.format(params['root_app_dir_path']))
-
-    del vcs
 
     return err
 
@@ -1267,8 +1279,11 @@ def build_world(name, working_dir, root=False):
 
 
 def main(command_line=None):
-    args = _parse_user_commands(command_line)
+    return vmn_run(command_line)
 
+
+def vmn_run(command_line):
+    args = parse_user_commands(command_line)
     cwd = os.getcwd()
     if 'VMN_WORKING_DIR' in os.environ:
         cwd = os.environ['VMN_WORKING_DIR']
@@ -1281,47 +1296,39 @@ def main(command_line=None):
     root = False
     if 'root' in args:
         root = args.root
-
     initial_params = {
         'root': root,
         'cwd': cwd,
         'name': None
     }
-
     if 'name' in args and args.name:
         validate_app_name(args)
         initial_params['name'] = args.name
-
     params = build_world(
         initial_params['name'],
         initial_params['cwd'],
         initial_params['root']
     )
 
-    vmn_path = os.path.join(params['root_path'], '.vmn')
-    lock_file_path = os.path.join(vmn_path, 'vmn.lock')
-    pathlib.Path(os.path.dirname(lock_file_path)).mkdir(
-        parents=True, exist_ok=True
-    )
-    lock = FileLock(lock_file_path)
-
-    err = 0
-    with lock:
-        LOGGER.info('Locked: {0}'.format(lock_file_path))
+    with VMNContextMAnagerManager(params) as vmn:
         if args.command == 'init':
-            err = _handle_init(args, params)
+            err = _handle_init(vmn.vcs, vmn.params)
         elif args.command == 'init-app':
-            err = _handle_init_app(args, params)
+            err = _handle_init_app(vmn.vcs, vmn.params, args.version)
         elif args.command == 'show':
-            err = _handle_show(LOGGER, args, params)
+            LOGGER.disabled = False
+            err = _handle_show(
+                vmn.vcs, vmn.params, args.raw,
+                args.verbose, args.version
+            )
+            LOGGER.disabled = True
         elif args.command == 'stamp':
-            err = _handle_stamp(args, params)
+            err = _handle_stamp(vmn.vcs, vmn.params)
         elif args.command == 'goto':
             err = _handle_goto(args, params)
         elif args.command == 'release':
             err = _handle_release(args, params)
 
-    LOGGER.info('Released locked: {0}'.format(lock_file_path))
     return err
 
 
@@ -1349,9 +1356,9 @@ def _handle_goto(args, params):
     return err
 
 
-def _handle_stamp(args, params):
-    params['release_mode'] = args.release_mode
-    params['prerelease'] = args.pr
+def _handle_stamp(vcs, params, release_mode, pr):
+    params['release_mode'] = release_mode
+    params['prerelease'] = pr
     vcs = VersionControlStamper(params)
 
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
@@ -1368,7 +1375,6 @@ def _handle_stamp(args, params):
         )
 
         LOGGER.info(version)
-        del vcs
 
         return 0
 
@@ -1436,30 +1442,23 @@ def _handle_add(args, params):
     return err
 
 
-def _handle_show(LOGGER, args, params):
+def _handle_show(vcs, params, raw, verbose, version):
     # root app does not have raw version number
     if params['root']:
         params['raw'] = False
     else:
-        params['raw'] = args.raw
-    params['verbose'] = args.verbose
-    LOGGER.disabled = False
-    version = args.version
+        params['raw'] = raw
 
-    vcs = VersionControlStamper(params)
+    params['verbose'] = verbose
+
     err = _safety_validation(vcs, allow_detached_head=True)
     if err:
-        del vcs
         return err
 
-    err = show(vcs, params, version)
-    del vcs
-
-    LOGGER.disabled = True
-    return err
+    return show(vcs, params, version)
 
 
-def _parse_user_commands(command_line):
+def parse_user_commands(command_line):
     parser = argparse.ArgumentParser('vmn')
     parser.add_argument(
         '--version', '-v',
@@ -1473,17 +1472,15 @@ def _parse_user_commands(command_line):
     )
     parser.set_defaults(debug=False)
     subprasers = parser.add_subparsers(dest='command')
-    pinit = subprasers.add_parser(
+    subprasers.add_parser(
         'init',
-        help='initialize version tracking for the repository or an application. '
-             'This command should be called only once per repository or an '
-             'application respectively'
+        help='initialize version tracking for the repository. '
+             'This command should be called only once per repository'
     )
     pinitapp = subprasers.add_parser(
         'init-app',
-        help='initialize version tracking for the repository or an application. '
-             'This command should be called only once per repository or an '
-             'application respectively'
+        help='initialize version tracking for application. '
+             'This command should be called only once per application'
     )
     pinitapp.add_argument(
         '-v', '--version',
