@@ -24,7 +24,29 @@ LOGGER = stamp_utils.init_stamp_logger()
 
 
 class VMNContextMAnagerManager(object):
-    def __init__(self, params):
+    def __init__(self, command_line):
+        self.args = parse_user_commands(command_line)
+        cwd = os.getcwd()
+        if 'VMN_WORKING_DIR' in os.environ:
+            cwd = os.environ['VMN_WORKING_DIR']
+
+        root = False
+        if 'root' in self.args:
+            root = self.args.root
+        initial_params = {
+            'root': root,
+            'cwd': cwd,
+            'name': None
+        }
+        if 'name' in self.args and self.args.name:
+            validate_app_name(self.args)
+            initial_params['name'] = self.args.name
+        params = build_world(
+            initial_params['name'],
+            initial_params['cwd'],
+            initial_params['root']
+        )
+
         vmn_path = os.path.join(params['root_path'], '.vmn')
         lock_file_path = os.path.join(vmn_path, 'vmn.lock')
         pathlib.Path(os.path.dirname(lock_file_path)).mkdir(
@@ -35,9 +57,11 @@ class VMNContextMAnagerManager(object):
         self.vcs = None
         self.lock_file_path = lock_file_path
 
+        global LOGGER
+        LOGGER = stamp_utils.init_stamp_logger(self.args.debug)
+
     def __enter__(self):
         self.lock.acquire()
-        LOGGER.info('Locked: {0}'.format(self.lock_file_path))
         self.vcs = VersionControlStamper(self.params)
         return self
 
@@ -46,7 +70,6 @@ class VMNContextMAnagerManager(object):
             del self.vcs
 
         self.lock.release()
-        LOGGER.info('Released locked: {0}'.format(self.lock_file_path))
 
 
 class IVersionsStamper(object):
@@ -695,21 +718,21 @@ class VersionControlStamper(IVersionsStamper):
         self.backend.pull()
 
 
-def _handle_init(vcs, params):
-    be = vcs.backend
+def _handle_init(vmn_ctx):
+    be = vmn_ctx.vcs.backend
 
-    if os.path.isdir('{0}/.vmn'.format(params['root_path'])):
+    if os.path.isdir('{0}/.vmn'.format(vmn_ctx.params['root_path'])):
         LOGGER.info('vmn tracking is already initialized')
 
         return 1
 
-    err = _safety_validation(vcs)
+    err = _safety_validation(vmn_ctx.vcs)
     if err:
         return err
 
     changeset = be.changeset()
 
-    vmn_path = os.path.join(params['root_path'], '.vmn')
+    vmn_path = os.path.join(vmn_ctx.params['root_path'], '.vmn')
     Path(vmn_path).mkdir(parents=True, exist_ok=True)
     vmn_unique_path = os.path.join(vmn_path, changeset)
     Path(vmn_unique_path).touch()
@@ -725,17 +748,17 @@ def _handle_init(vcs, params):
     )
     be.push()
 
-    LOGGER.info('Initialized vmn tracking on {0}'.format(params['root_path']))
+    LOGGER.info('Initialized vmn tracking on {0}'.format(vmn_ctx.params['root_path']))
 
     return err
 
 
-def _handle_init_app(vcs, params, version):
-    err = _init_app(vcs, params, version)
+def _handle_init_app(vmn_ctx):
+    err = _init_app(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
     if err:
         return err
 
-    LOGGER.info('Initialized app tracking on {0}'.format(params['root_app_dir_path']))
+    LOGGER.info('Initialized app tracking on {0}'.format(vmn_ctx.params['root_app_dir_path']))
 
     return err
 
@@ -1283,51 +1306,19 @@ def main(command_line=None):
 
 
 def vmn_run(command_line):
-    args = parse_user_commands(command_line)
-    cwd = os.getcwd()
-    if 'VMN_WORKING_DIR' in os.environ:
-        cwd = os.environ['VMN_WORKING_DIR']
-
-    global LOGGER
-    LOGGER = stamp_utils.init_stamp_logger(args.debug)
-    if args.command == 'show':
-        LOGGER.disabled = True
-
-    root = False
-    if 'root' in args:
-        root = args.root
-    initial_params = {
-        'root': root,
-        'cwd': cwd,
-        'name': None
-    }
-    if 'name' in args and args.name:
-        validate_app_name(args)
-        initial_params['name'] = args.name
-    params = build_world(
-        initial_params['name'],
-        initial_params['cwd'],
-        initial_params['root']
-    )
-
-    with VMNContextMAnagerManager(params) as vmn:
-        if args.command == 'init':
-            err = _handle_init(vmn.vcs, vmn.params)
-        elif args.command == 'init-app':
-            err = _handle_init_app(vmn.vcs, vmn.params, args.version)
-        elif args.command == 'show':
-            LOGGER.disabled = False
-            err = _handle_show(
-                vmn.vcs, vmn.params, args.raw,
-                args.verbose, args.version
-            )
-            LOGGER.disabled = True
-        elif args.command == 'stamp':
-            err = _handle_stamp(vmn.vcs, vmn.params)
-        elif args.command == 'goto':
-            err = _handle_goto(args, params)
-        elif args.command == 'release':
-            err = _handle_release(args, params)
+    with VMNContextMAnagerManager(command_line) as vmn_ctx:
+        if vmn_ctx.args.command == 'init':
+            err = _handle_init(vmn_ctx)
+        elif vmn_ctx.args.command == 'init-app':
+            err = _handle_init_app(vmn_ctx)
+        elif vmn_ctx.args.command == 'show':
+            err = _handle_show(vmn_ctx)
+        elif vmn_ctx.args.command == 'stamp':
+            err = _handle_stamp(vmn_ctx)
+        elif vmn_ctx.args.command == 'goto':
+            err = _handle_goto(vmn_ctx)
+        elif vmn_ctx.args.command == 'release':
+            err = _handle_release(vmn_ctx)
 
     return err
 
@@ -1343,34 +1334,27 @@ def validate_app_name(args):
         )
 
 
-def _handle_goto(args, params):
-    version = args.version
-
+def _handle_goto(vmn_ctx):
     # TODO: check version with VMN_REGEX
-    params['deps_only'] = args.deps_only
+    vmn_ctx.params['deps_only'] = vmn_ctx.args.deps_only
 
-    vcs = VersionControlStamper(params)
-    err = goto_version(vcs, params, version)
-    del vcs
-
-    return err
+    return goto_version(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
 
 
-def _handle_stamp(vcs, params, release_mode, pr):
-    params['release_mode'] = release_mode
-    params['prerelease'] = pr
-    vcs = VersionControlStamper(params)
+def _handle_stamp(vmn_ctx):
+    vmn_ctx.params['release_mode'] = vmn_ctx.args.release_mode
+    vmn_ctx.params['prerelease'] = vmn_ctx.args.pr
 
-    if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
+    if not os.path.isdir('{0}/.vmn'.format(vmn_ctx.params['root_path'])):
         LOGGER.info('vmn tracking is not yet initialized')
         return 1
 
-    matched_version_info = vcs.find_matching_version()
+    matched_version_info = vmn_ctx.vcs.find_matching_version()
     if matched_version_info is not None:
         # Good we have found an existing version matching
         # the actual_deps_state
 
-        version = vcs.get_be_formatted_version(
+        version = vmn_ctx.vcs.get_be_formatted_version(
             matched_version_info['stamping']['app']['_version']
         )
 
@@ -1378,44 +1362,35 @@ def _handle_stamp(vcs, params, release_mode, pr):
 
         return 0
 
-    err = _safety_validation(vcs)
+    err = _safety_validation(vmn_ctx.vcs)
     if err:
         return err
 
     try:
-        version = _stamp_version(vcs, args.pull)
+        version = _stamp_version(vmn_ctx.vcs, vmn_ctx.args.pull)
     except Exception as exc:
         LOGGER.exception('Logged Exception message:')
 
         return 1
 
     LOGGER.info(version)
-    del vcs
 
     return err
 
 
-def _handle_release(args, params):
-    version = args.version
-
-    vcs = VersionControlStamper(params)
-    err = _safety_validation(vcs, allow_detached_head=True)
+def _handle_release(vmn_ctx):
+    err = _safety_validation(vmn_ctx.vcs, allow_detached_head=True)
     if err:
-        del vcs
         return err
 
     try:
-        version = vcs.release_app_version(version)
+        LOGGER.info(vmn_ctx.vcs.release_app_version(vmn_ctx.args.version))
     except Exception as exc:
         LOGGER.exception('Logged Exception message:')
-        del vcs
 
         return 1
 
-    LOGGER.info(version)
-    del vcs
-
-    return err
+    return 0
 
 
 def _handle_add(args, params):
@@ -1442,20 +1417,20 @@ def _handle_add(args, params):
     return err
 
 
-def _handle_show(vcs, params, raw, verbose, version):
+def _handle_show(vmn_ctx):
     # root app does not have raw version number
-    if params['root']:
-        params['raw'] = False
+    if vmn_ctx.params['root']:
+        vmn_ctx.params['raw'] = False
     else:
-        params['raw'] = raw
+        vmn_ctx.params['raw'] = vmn_ctx.args.raw
 
-    params['verbose'] = verbose
+    vmn_ctx.params['verbose'] = vmn_ctx.args.verbose
 
-    err = _safety_validation(vcs, allow_detached_head=True)
+    err = _safety_validation(vmn_ctx.vcs, allow_detached_head=True)
     if err:
         return err
 
-    return show(vcs, params, version)
+    return show(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
 
 
 def parse_user_commands(command_line):
