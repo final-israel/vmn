@@ -247,6 +247,9 @@ class GitBackend(VersionControlBackend):
     def __del__(self):
         self._be.close()
 
+    def is_tracked(self, path):
+        return path in self._be.untracked_files
+
     def tag(self, tags, messages, ref='HEAD'):
         for tag, message in zip(tags, messages):
             # This is required in order to preserver chronological order when
@@ -504,11 +507,27 @@ class GitBackend(VersionControlBackend):
             app_name
         )
         app_tags = self.tags(filter=(f'{tag_formated_app_name}_*'))
+        cleaned_app_tags = []
+        for tag in app_tags:
+            match = re.search(
+                VMN_TAG_REGEX,
+                tag
+            )
+            if match is None:
+                raise RuntimeError(
+                    f"Tag {tag} doesn't comply to vmn version format"
+                )
 
-        if not app_tags:
+            gdict = match.groupdict()
+            if gdict['app_name'] != app_name:
+                continue
+
+            cleaned_app_tags.append(tag)
+
+        if not cleaned_app_tags:
             return None
 
-        return self.get_vmn_tag_version_info(app_tags[0])
+        return self.get_vmn_tag_version_info(cleaned_app_tags[0])
 
     def get_vmn_tag_version_info(self, tag_name):
         commit_tag_obj = self._be.commit(tag_name)

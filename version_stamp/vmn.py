@@ -36,15 +36,25 @@ class VMNContextMAnagerManager(object):
         initial_params = {
             'root': root,
             'cwd': cwd,
-            'name': None
+            'name': None,
+            'release_mode': None,
+            'prerelease': None,
         }
+
         if 'name' in self.args and self.args.name:
             validate_app_name(self.args)
             initial_params['name'] = self.args.name
+        if 'release_mode' in self.args and self.args.release_mode:
+            initial_params['release_mode'] = self.args.release_mode
+        if 'prerelease' in self.args and self.args.prerelease:
+            initial_params['prerelease'] = self.args.prerelease
+
         params = build_world(
             initial_params['name'],
             initial_params['cwd'],
-            initial_params['root']
+            initial_params['root'],
+            initial_params['release_mode'],
+            initial_params['prerelease']
         )
 
         vmn_path = os.path.join(params['root_path'], '.vmn')
@@ -107,8 +117,9 @@ class IVersionsStamper(object):
         self._root_app_conf_path = conf['root_app_conf_path']
         self._root_app_dir_path = conf['root_app_dir_path']
         self._extra_info = conf['extra_info']
-        self._version_file_path = '{}/{}'.format(
-            self._app_dir_path, VER_FILE_NAME)
+        self._version_file_path = os.path.join(
+            self._app_dir_path, VER_FILE_NAME
+        )
 
         self.template = IVersionsStamper.parse_template(conf['template'])
 
@@ -179,7 +190,8 @@ class IVersionsStamper(object):
             prerelease = self._previous_prerelease
 
         counter_key = f"{prerelease}"
-        assert not counter_key.startswith('release')
+        # TODO: why this is needed?
+        #assert not counter_key.startswith('release')
         if self._previous_prerelease != 'release' and self._release_mode is None:
             if counter_key not in prerelease_count:
                 prerelease_count[counter_key] = 0
@@ -358,6 +370,10 @@ class VersionControlStamper(IVersionsStamper):
         # user's repositories local state
         for tag in self.backend.tags(filter=f'{tag_formatted_app_name}_*'):
             ver_info = self.backend.get_vmn_tag_version_info(tag)
+            # Can happen if app's name is a prefix of another app
+            if ver_info['stamping']['app']['name'] != self._name:
+                continue
+
             if ver_info is None:
                 raise RuntimeError(f"Failed to get information for tag {tag}")
 
@@ -721,14 +737,15 @@ class VersionControlStamper(IVersionsStamper):
 def _handle_init(vmn_ctx):
     be = vmn_ctx.vcs.backend
 
-    if os.path.isdir('{0}/.vmn'.format(vmn_ctx.params['root_path'])):
+    path = os.path.join(vmn_ctx.params['root_path'], '.vmn')
+    if be.is_tracked(path):
         LOGGER.info('vmn tracking is already initialized')
 
         return 1
 
     err = _safety_validation(vmn_ctx.vcs)
     if err:
-        return err
+        return 1
 
     changeset = be.changeset()
 
@@ -750,17 +767,111 @@ def _handle_init(vmn_ctx):
 
     LOGGER.info('Initialized vmn tracking on {0}'.format(vmn_ctx.params['root_path']))
 
-    return err
+    return 0
 
 
 def _handle_init_app(vmn_ctx):
     err = _init_app(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
     if err:
-        return err
+        return 1
 
     LOGGER.info('Initialized app tracking on {0}'.format(vmn_ctx.params['root_app_dir_path']))
 
-    return err
+    return 0
+
+
+def _handle_stamp(vmn_ctx):
+    vmn_ctx.params['release_mode'] = vmn_ctx.args.release_mode
+    vmn_ctx.params['prerelease'] = vmn_ctx.args.pr
+
+    if not os.path.isdir('{0}/.vmn'.format(vmn_ctx.params['root_path'])):
+        LOGGER.info('vmn tracking is not yet initialized')
+        return 1
+
+    matched_version_info = vmn_ctx.vcs.find_matching_version()
+    if matched_version_info is not None:
+        # Good we have found an existing version matching
+        # the actual_deps_state
+
+        version = vmn_ctx.vcs.get_be_formatted_version(
+            matched_version_info['stamping']['app']['_version']
+        )
+
+        LOGGER.info(version)
+
+        return 0
+
+    err = _safety_validation(vmn_ctx.vcs)
+    if err:
+        return 1
+
+    try:
+        version = _stamp_version(vmn_ctx.vcs, vmn_ctx.args.pull)
+    except Exception as exc:
+        LOGGER.exception('Logged Exception message:')
+
+        return 1
+
+    LOGGER.info(version)
+
+    return 0
+
+
+def _handle_release(vmn_ctx):
+    err = _safety_validation(vmn_ctx.vcs, allow_detached_head=True)
+    if err:
+        return 1
+
+    try:
+        LOGGER.info(vmn_ctx.vcs.release_app_version(vmn_ctx.args.version))
+    except Exception as exc:
+        LOGGER.exception('Logged Exception message:')
+
+        return 1
+
+    return 0
+
+
+def _handle_add(vmn_ctx):
+    vmn_ctx.params['buildmetadata'] = vmn_ctx.args.build_metadata
+    vmn_ctx.params['releasenotes'] = vmn_ctx.args.releasenotes
+    version = vmn_ctx.args.version
+
+    err = _safety_validation(vmn_ctx.vcs, allow_detached_head=True)
+    if err:
+        return 1
+
+    try:
+        raise NotImplementedError('Adding metadata to versions is not supported yet')
+    except Exception as exc:
+        LOGGER.exception('Logged Exception message:')
+
+        return 1
+
+    return 0
+
+
+def _handle_show(vmn_ctx):
+    # root app does not have raw version number
+    if vmn_ctx.params['root']:
+        vmn_ctx.params['raw'] = False
+    else:
+        vmn_ctx.params['raw'] = vmn_ctx.args.raw
+
+    vmn_ctx.params['verbose'] = vmn_ctx.args.verbose
+
+    err = _safety_validation(vmn_ctx.vcs, allow_detached_head=True)
+    if err:
+        return 1
+
+    return show(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
+
+
+def _handle_goto(vmn_ctx):
+    # TODO: check version with VMN_REGEX
+    vmn_ctx.params['deps_only'] = vmn_ctx.args.deps_only
+
+    return goto_version(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
 
 
 def _safety_validation(
@@ -799,7 +910,7 @@ def _init_app(versions_be_ifc, params, starting_version):
 
     err = _safety_validation(versions_be_ifc)
     if err:
-        return err
+        return 1
 
     if versions_be_ifc.tracked:
         LOGGER.info('Will not init an already tracked app')
@@ -1192,16 +1303,17 @@ def _goto_version(deps, root):
         )
 
 
-def build_world(name, working_dir, root=False):
+def build_world(name, working_dir, root, release_mode, prerelease):
     params = {
         'name': name,
         'working_dir': working_dir,
         'root': root,
-        'release_mode': None,
-        'prerelease': None,
+        'release_mode': release_mode,
+        'prerelease': prerelease,
         'buildmetadata': None,
     }
 
+    # TODO: think how vcs can be used here
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
@@ -1332,105 +1444,6 @@ def validate_app_name(args):
         raise RuntimeError(
             'App name cannot contain {0}'.format('-')
         )
-
-
-def _handle_goto(vmn_ctx):
-    # TODO: check version with VMN_REGEX
-    vmn_ctx.params['deps_only'] = vmn_ctx.args.deps_only
-
-    return goto_version(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
-
-
-def _handle_stamp(vmn_ctx):
-    vmn_ctx.params['release_mode'] = vmn_ctx.args.release_mode
-    vmn_ctx.params['prerelease'] = vmn_ctx.args.pr
-
-    if not os.path.isdir('{0}/.vmn'.format(vmn_ctx.params['root_path'])):
-        LOGGER.info('vmn tracking is not yet initialized')
-        return 1
-
-    matched_version_info = vmn_ctx.vcs.find_matching_version()
-    if matched_version_info is not None:
-        # Good we have found an existing version matching
-        # the actual_deps_state
-
-        version = vmn_ctx.vcs.get_be_formatted_version(
-            matched_version_info['stamping']['app']['_version']
-        )
-
-        LOGGER.info(version)
-
-        return 0
-
-    err = _safety_validation(vmn_ctx.vcs)
-    if err:
-        return err
-
-    try:
-        version = _stamp_version(vmn_ctx.vcs, vmn_ctx.args.pull)
-    except Exception as exc:
-        LOGGER.exception('Logged Exception message:')
-
-        return 1
-
-    LOGGER.info(version)
-
-    return err
-
-
-def _handle_release(vmn_ctx):
-    err = _safety_validation(vmn_ctx.vcs, allow_detached_head=True)
-    if err:
-        return err
-
-    try:
-        LOGGER.info(vmn_ctx.vcs.release_app_version(vmn_ctx.args.version))
-    except Exception as exc:
-        LOGGER.exception('Logged Exception message:')
-
-        return 1
-
-    return 0
-
-
-def _handle_add(args, params):
-    params['buildmetadata'] = args.build_metadata
-    params['releasenotes'] = args.releasenotes
-    version = args.version
-
-    vcs = VersionControlStamper(params)
-    err = _safety_validation(vcs, allow_detached_head=True)
-    if err:
-        del vcs
-
-        return err
-
-    try:
-        raise NotImplementedError('Adding metadata to versions is not supported yet')
-    except Exception as exc:
-        LOGGER.exception('Logged Exception message:')
-
-        return 1
-
-    del vcs
-
-    return err
-
-
-def _handle_show(vmn_ctx):
-    # root app does not have raw version number
-    if vmn_ctx.params['root']:
-        vmn_ctx.params['raw'] = False
-    else:
-        vmn_ctx.params['raw'] = vmn_ctx.args.raw
-
-    vmn_ctx.params['verbose'] = vmn_ctx.args.verbose
-
-    err = _safety_validation(vmn_ctx.vcs, allow_detached_head=True)
-    if err:
-        return err
-
-    return show(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
 
 
 def parse_user_commands(command_line):

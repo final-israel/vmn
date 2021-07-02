@@ -17,63 +17,71 @@ def test_basic_stamp(app_layout):
         err = vmn._handle_init(vmn_ctx)
         assert err == 0
 
-    params = copy.deepcopy(app_layout.params)
-    params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['actual_deps_state']) == 1
-    vmn._handle_init(params)
-    vmn._handle_init_app(params)
+    with vmn.VMNContextMAnagerManager(
+            [
+                'init-app',
+                app_layout.app_name
+            ]
+    ) as vmn_ctx:
+        err = vmn._handle_init_app(vmn_ctx)
+        assert err == 0
+        assert len(vmn_ctx.vcs.actual_deps_state) == 1
 
-    params = vmn.build_world(params['name'], params['working_dir'])
-    params['release_mode'] = 'patch'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
+    for i in range(2):
+        with vmn.VMNContextMAnagerManager(
+                [
+                    'stamp',
+                    '-r', 'patch',
+                    app_layout.app_name
+                ]
+        ) as vmn_ctx:
+            err = vmn._handle_stamp(vmn_ctx)
+            assert err == 0
 
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    data = ver_info['stamping']['app']
-    assert data['version'] == '0.0.1'
+            ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_layout.app_name)
+            data = ver_info['stamping']['app']
+            assert data['_version'] == '0.0.1'
 
-    params = vmn.build_world(params['name'], params['working_dir'])
-    params['release_mode'] = 'patch'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '1.0.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
+    new_name = '{0}_{1}'.format(app_layout.app_name, '2')
+    with vmn.VMNContextMAnagerManager(
+            [
+                'init-app',
+                '-v', '1.0.0',
+                new_name
+            ]
+    ) as vmn_ctx:
+        err = vmn._handle_init_app(vmn_ctx)
+        assert err == 0
+        assert len(vmn_ctx.vcs.actual_deps_state) == 1
 
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    data = ver_info['stamping']['app']
-    assert data['version'] == '0.0.1'
+    for i in range(2):
+        with vmn.VMNContextMAnagerManager(
+                [
+                    'stamp',
+                    '-r', 'patch',
+                    new_name
+                ]
+        ) as vmn_ctx:
+            err = vmn._handle_stamp(vmn_ctx)
+            assert err == 0
 
-    old_name = params['name']
-    params['name'] = '{0}_{1}'.format(params['name'], '2')
-    params = vmn.build_world(params['name'], params['working_dir'])
-    params['release_mode'] = 'patch'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '1.0.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params, init_only=True)
-    vmn.stamp(vcs, params)
-    vmn.stamp(vcs, params)
+            ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(new_name)
+            data = ver_info['stamping']['app']
+            assert data['_version'] == '1.0.1'
 
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    data = ver_info['stamping']['app']
-    assert data['version'] == '1.0.1'
+    with vmn.VMNContextMAnagerManager(
+            [
+                'stamp',
+                '-r', 'patch',
+                app_layout.app_name
+            ]
+    ) as vmn_ctx:
+        err = vmn._handle_stamp(vmn_ctx)
+        assert err == 0
 
-    params['name'] = old_name
-    params = vmn.build_world(params['name'], params['working_dir'])
-    params['release_mode'] = 'patch'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '3.1.34'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
-
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    data = ver_info['stamping']['app']
-    assert data['version'] == '0.0.1'
+        ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_layout.app_name)
+        data = ver_info['stamping']['app']
+        assert data['_version'] == '0.0.1'
 
 
 def test_basic_show(app_layout, capfd):
