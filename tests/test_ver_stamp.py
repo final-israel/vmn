@@ -52,6 +52,20 @@ def _stamp_app(app_name, expected_version, release_mode=None, prerelease=None):
         assert data['_version'] == expected_version
 
 
+def _show(app_name, verbose=None, raw=None):
+    args_list = ['show']
+    if verbose is not None:
+        args_list.append('--verbose')
+    if raw is not None:
+        args_list.append('--raw')
+
+    args_list.append(app_name)
+
+    with vmn.VMNContextMAnagerManager(args_list) as vmn_ctx:
+        err = vmn._handle_show(vmn_ctx)
+        assert err == 0
+
+
 def test_basic_stamp(app_layout):
     _init_vmn_in_repo()
     _init_app(app_layout.app_name)
@@ -69,47 +83,25 @@ def test_basic_stamp(app_layout):
 
 
 def test_basic_show(app_layout, capfd):
-    params = copy.deepcopy(app_layout.params)
-    params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['actual_deps_state']) == 1
-    vmn._handle_init(params)
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name)
 
-    params = vmn.build_world(params['name'], params['working_dir'])
-    params['release_mode'] = 'patch'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '0.0.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
+    _stamp_app(app_layout.app_name, '0.0.1', 'patch')
 
+    # read to clear stderr and out
     out, err = capfd.readouterr()
-    assert not out
+    assert not err
 
-    params = vmn.build_world(params['name'], params['working_dir'])
-    params['verbose'] = False
-    params['starting_version'] = '0.0.0'
-    params['prerelease'] = None
-    params['buildmetadata'] = None
-    params['release_mode'] = 'patch'
-    params['raw'] = False
-    vcs = vmn.VersionControlStamper(params)
-    vmn.show(vcs, params)
+    _show(app_layout.app_name, raw=True)
+
     out, err = capfd.readouterr()
     assert '0.0.1\n' == out
 
-    params['verbose'] = False
-    params['raw'] = True
-    vcs = vmn.VersionControlStamper(params)
-    vmn.show(vcs, params)
-    out, err = capfd.readouterr()
-    assert '0.0.1\n' == out
+    _show(app_layout.app_name, verbose=True)
 
-    params['verbose'] = True
-    vcs = vmn.VersionControlStamper(params)
-    vmn.show(vcs, params)
     out, err = capfd.readouterr()
     try:
-        data = yaml.safe_load(out)
+        yaml.safe_load(out)
     except Exception as we:
         assert False
 

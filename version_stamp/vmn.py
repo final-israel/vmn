@@ -639,9 +639,9 @@ class VersionControlStamper(IVersionsStamper):
         return '{0}'.format(root_version)
 
     def get_files_to_add_to_index(self, paths):
-        changed = [os.path.join(self._root_path, item.a_path)
+        changed = [os.path.join(self._root_path, item.a_path.replace("/", os.sep))
                    for item in self.backend._be.index.diff(None)]
-        untracked = [os.path.join(self._root_path, item)
+        untracked = [os.path.join(self._root_path, item.replace("/", os.sep))
                      for item in self.backend._be.untracked_files]
 
         version_files = []
