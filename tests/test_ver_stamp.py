@@ -12,76 +12,60 @@ import stamp_utils
 vmn.LOGGER = stamp_utils.init_stamp_logger(True)
 
 
-def test_basic_stamp(app_layout):
+def _init_vmn_in_repo():
     with vmn.VMNContextMAnagerManager(['init']) as vmn_ctx:
         err = vmn._handle_init(vmn_ctx)
         assert err == 0
 
+
+def _init_app(app_name, starting_version='0.0.0'):
     with vmn.VMNContextMAnagerManager(
             [
                 'init-app',
-                app_layout.app_name
+                '-v', starting_version,
+                app_name,
             ]
     ) as vmn_ctx:
         err = vmn._handle_init_app(vmn_ctx)
         assert err == 0
         assert len(vmn_ctx.vcs.actual_deps_state) == 1
 
-    for i in range(2):
-        with vmn.VMNContextMAnagerManager(
-                [
-                    'stamp',
-                    '-r', 'patch',
-                    app_layout.app_name
-                ]
-        ) as vmn_ctx:
-            err = vmn._handle_stamp(vmn_ctx)
-            assert err == 0
 
-            ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_layout.app_name)
-            data = ver_info['stamping']['app']
-            assert data['_version'] == '0.0.1'
+def _stamp_app(app_name, expected_version, release_mode=None, prerelease=None):
+    args_list = ['stamp']
+    if release_mode is not None:
+        args_list.extend(['-r', release_mode])
 
-    new_name = '{0}_{1}'.format(app_layout.app_name, '2')
-    with vmn.VMNContextMAnagerManager(
-            [
-                'init-app',
-                '-v', '1.0.0',
-                new_name
-            ]
-    ) as vmn_ctx:
-        err = vmn._handle_init_app(vmn_ctx)
-        assert err == 0
-        assert len(vmn_ctx.vcs.actual_deps_state) == 1
+    if prerelease is not None:
+        args_list.extend([
+            '--pr', prerelease
+        ])
 
-    for i in range(2):
-        with vmn.VMNContextMAnagerManager(
-                [
-                    'stamp',
-                    '-r', 'patch',
-                    new_name
-                ]
-        ) as vmn_ctx:
-            err = vmn._handle_stamp(vmn_ctx)
-            assert err == 0
+    args_list.append(app_name)
 
-            ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(new_name)
-            data = ver_info['stamping']['app']
-            assert data['_version'] == '1.0.1'
-
-    with vmn.VMNContextMAnagerManager(
-            [
-                'stamp',
-                '-r', 'patch',
-                app_layout.app_name
-            ]
-    ) as vmn_ctx:
+    with vmn.VMNContextMAnagerManager(args_list) as vmn_ctx:
         err = vmn._handle_stamp(vmn_ctx)
         assert err == 0
 
-        ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_layout.app_name)
+        ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_name)
         data = ver_info['stamping']['app']
-        assert data['_version'] == '0.0.1'
+        assert data['_version'] == expected_version
+
+
+def test_basic_stamp(app_layout):
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name)
+
+    for i in range(2):
+        _stamp_app(app_layout.app_name, '0.0.1', 'patch')
+
+    new_name = '{0}_{1}'.format(app_layout.app_name, '2')
+    _init_app(new_name, '1.0.0')
+
+    for i in range(2):
+        _stamp_app(new_name, '1.0.1', 'patch')
+
+    _stamp_app(app_layout.app_name, '0.0.1', 'patch')
 
 
 def test_basic_show(app_layout, capfd):
