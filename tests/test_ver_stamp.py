@@ -31,7 +31,7 @@ def _init_app(app_name, starting_version='0.0.0'):
         assert len(vmn_ctx.vcs.actual_deps_state) == 1
 
 
-def _stamp_app(app_name, expected_version, release_mode=None, prerelease=None):
+def _stamp_app(app_name, release_mode=None, prerelease=None):
     args_list = ['stamp']
     if release_mode is not None:
         args_list.extend(['-r', release_mode])
@@ -43,13 +43,14 @@ def _stamp_app(app_name, expected_version, release_mode=None, prerelease=None):
 
     args_list.append(app_name)
 
+    ver_info = None
     with vmn.VMNContextMAnagerManager(args_list) as vmn_ctx:
         err = vmn._handle_stamp(vmn_ctx)
         assert err == 0
 
         ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_name)
-        data = ver_info['stamping']['app']
-        assert data['_version'] == expected_version
+
+    return ver_info
 
 
 def _show(app_name, verbose=None, raw=None):
@@ -71,22 +72,25 @@ def test_basic_stamp(app_layout):
     _init_app(app_layout.app_name)
 
     for i in range(2):
-        _stamp_app(app_layout.app_name, '0.0.1', 'patch')
+        ver_info = _stamp_app(app_layout.app_name, 'patch')
+        assert ver_info['stamping']['app']['_version'] == '0.0.1'
 
     new_name = '{0}_{1}'.format(app_layout.app_name, '2')
     _init_app(new_name, '1.0.0')
 
     for i in range(2):
-        _stamp_app(new_name, '1.0.1', 'patch')
+        ver_info = _stamp_app(new_name, 'patch')
+        assert ver_info['stamping']['app']['_version'] == '1.0.1'
 
-    _stamp_app(app_layout.app_name, '0.0.1', 'patch')
+    ver_info = _stamp_app(app_layout.app_name, 'patch')
+    assert ver_info['stamping']['app']['_version'] == '0.0.1'
 
 
 def test_basic_show(app_layout, capfd):
     _init_vmn_in_repo()
     _init_app(app_layout.app_name)
 
-    _stamp_app(app_layout.app_name, '0.0.1', 'patch')
+    _stamp_app(app_layout.app_name, 'patch')
 
     # read to clear stderr and out
     out, err = capfd.readouterr()
@@ -107,23 +111,13 @@ def test_basic_show(app_layout, capfd):
 
 
 def test_multi_repo_dependency(app_layout):
-    params = copy.deepcopy(app_layout.params)
-    params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['actual_deps_state']) == 1
-    vmn._handle_init(params)
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name)
 
-    params['release_mode'] = 'patch'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '0.0.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
+    _stamp_app(app_layout.app_name, 'patch')
 
     conf = {
-        'semver_template': '{major}.{minor}.{patch}',
-        'hotfix_template': '_{hotfix}',
-        'prerelease_template': '-{prerelease}',
-        'buildmetadata_template': '+{buildmetadata}',
+        'template': '[{major}][.{minor}][.{patch}]',
         'deps': {'../': {
             'test_repo': {
                 'vcs_type': app_layout.be_type,
@@ -144,31 +138,34 @@ def test_multi_repo_dependency(app_layout):
             }
         })
 
-    app_layout.write_conf(**conf)
+    with vmn.VMNContextMAnagerManager(
+            [
+                'show',
+                app_layout.app_name,
+            ]
+    ) as vmn_ctx:
+        app_layout.write_conf(vmn_ctx, **conf)
 
-    params = vmn.build_world(params['name'], params['working_dir'])
-    params['release_mode'] = 'patch'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '0.0.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
+    ver_info = _stamp_app(app_layout.app_name, 'patch')
+    assert ver_info['stamping']['app']['_version'] == '0.0.2'
 
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    data = ver_info['stamping']['app']
-    assert data['version'] == '0.0.2'
+    assert '.' in ver_info['stamping']['app']['changesets']
+    assert os.path.join('..', 'repo1') in ver_info['stamping']['app']['changesets']
+    assert os.path.join('..', 'repo2') in ver_info['stamping']['app']['changesets']
 
-    assert data['version'] == '0.0.2'
-    assert '.' in data['changesets']
-    assert os.path.join('..', 'repo1') in data['changesets']
-    assert os.path.join('..', 'repo2') in data['changesets']
-
-    with open(params['app_conf_path'], 'r') as f:
-        data = yaml.safe_load(f)
-        assert '../' in data['conf']['deps']
-        assert 'test_repo' in data['conf']['deps']['../']
-        assert 'repo1' in data['conf']['deps']['../']
-        assert 'repo2' in data['conf']['deps']['../']
+    with vmn.VMNContextMAnagerManager(
+            [
+                'show',
+                app_layout.app_name,
+            ]
+    ) as vmn_ctx:
+        app_layout.write_conf(vmn_ctx, **conf)
+        with open(vmn_ctx.vcs._app_conf_path, 'r') as f:
+            data = yaml.safe_load(f)
+            assert '../' in data['conf']['deps']
+            assert 'test_repo' in data['conf']['deps']['../']
+            assert 'repo1' in data['conf']['deps']['../']
+            assert 'repo2' in data['conf']['deps']['../']
 
 
 def test_goto_deleted_repos(app_layout):

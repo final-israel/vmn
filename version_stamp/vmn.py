@@ -1399,6 +1399,8 @@ def build_world(name, working_dir, root, release_mode, prerelease):
     with open(app_conf_path, 'r') as f:
         data = yaml.safe_load(f)
         params['template'] = data["conf"]["template"]
+        params["extra_info"] = data["conf"]["extra_info"]
+        params['raw_configured_deps'] = data["conf"]["deps"]
 
         deps = {}
         for rel_path, dep in params['raw_configured_deps'].items():
