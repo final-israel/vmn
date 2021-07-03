@@ -25,7 +25,7 @@ vmn init
 ## Needed only once per app-name
 vmn init-app <app-name>
 
-# Examples:
+# will stamp 0.0.1
 vmn stamp -r patch <app-name>
 
 # example for starting from version 1.6.8
