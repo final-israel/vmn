@@ -182,7 +182,7 @@ class IVersionsStamper(object):
             current_version
         )
 
-        # TODO:: self._prerelease cannot be 'release'
+        # TODO:: self._prerelease cannot be 'release'?
         gdict = match.groupdict()
         major = gdict['major']
         minor = gdict['minor']
@@ -240,7 +240,6 @@ class IVersionsStamper(object):
 
         return verstr, prerelease, prerelease_count
 
-    # TODO: similar logic may be used for diplsying user template on top of version
     def gen_vmn_version(self, major, minor, patch, hotfix=None, prerelease=None):
         if self._hide_zero_hotfix and hotfix == '0':
             hotfix = None
@@ -434,7 +433,6 @@ class VersionControlStamper(IVersionsStamper):
         )
 
         self._should_publish = False
-        # TODO: get tag name from version
         tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
             self._name, old_version
         )
@@ -457,7 +455,6 @@ class VersionControlStamper(IVersionsStamper):
 
         version = f'{version}+{self._buildmetadata}'
 
-        # TODO: get tag name from version
         tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
             self._name, version
         )
@@ -481,7 +478,6 @@ class VersionControlStamper(IVersionsStamper):
         if not releasing_rc:
             raise RuntimeError("No prerelease version to release")
 
-        # TODO: get tag name from version
         tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
             self._name, version
         )
@@ -504,7 +500,6 @@ class VersionControlStamper(IVersionsStamper):
         if props['hotfix'] != '0':
             props['version'] = f'{props["version"]}.{props["hotfix"]}'
 
-        # TODO: get tag name from version
         release_tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
             self._name, props['version']
         )
@@ -542,7 +537,6 @@ class VersionControlStamper(IVersionsStamper):
         if override_current_version is None:
             override_current_version = version_to_start_from
 
-        # TODO:: optimization find max here
         # TODO: verify that can be called multiple times with same result
         current_version, prerelease, prerelease_count = \
             self.gen_app_version(
@@ -693,7 +687,6 @@ class VersionControlStamper(IVersionsStamper):
             }
         }
 
-        # TODO: get tag name from version
         tags = [stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
             self._name, app_version
         )]
@@ -707,7 +700,6 @@ class VersionControlStamper(IVersionsStamper):
             }
             msgs.append(root_app_msg)
             tags.append(
-                # TODO: get tag name from version (root case is simple)
                 stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
                     self._root_app_name, root_app_version)
             )
@@ -875,7 +867,6 @@ def _handle_show(vmn_ctx):
 
 
 def _handle_goto(vmn_ctx):
-    # TODO: check version with VMN_REGEX
     vmn_ctx.params['deps_only'] = vmn_ctx.args.deps_only
 
     return goto_version(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)

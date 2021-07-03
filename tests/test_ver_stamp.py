@@ -1,6 +1,5 @@
 import sys
 import os
-import copy
 import yaml
 import shutil
 
@@ -33,7 +32,7 @@ def _init_app(app_name, starting_version='0.0.0'):
 
         ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_name)
 
-        return (ver_info, vmn_ctx.params)
+        return ver_info, vmn_ctx.params
 
 
 def _release_app(app_name, version):
@@ -43,7 +42,7 @@ def _release_app(app_name, version):
 
         ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_name)
 
-        return (ver_info, vmn_ctx.params)
+        return ver_info, vmn_ctx.params
 
 
 def _stamp_app(app_name, release_mode=None, prerelease=None):
@@ -64,7 +63,7 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
 
         ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_name)
 
-        return (ver_info, vmn_ctx.params)
+        return ver_info, vmn_ctx.params
 
 
 def _show(app_name, verbose=None, raw=None, root=False):
@@ -122,7 +121,7 @@ def test_basic_show(app_layout, capfd):
     out, err = capfd.readouterr()
     try:
         yaml.safe_load(out)
-    except Exception as we:
+    except Exception:
         assert False
 
 
@@ -215,7 +214,7 @@ def test_goto_deleted_repos(app_layout):
         assert err == 0
 
 
-def test_basic_root_stamp(app_layout):
+def test_basic_root_stamp():
     _init_vmn_in_repo()
 
     app_name = 'root_app/app1'
@@ -295,7 +294,7 @@ def test_rc_stamping(app_layout):
     assert data['_version'] == '1.3.0'
 
 
-def test_version_template(app_layout):
+def test_version_template():
     formated_version = \
         stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
             '2.0.9',
@@ -428,7 +427,7 @@ def test_manual_file_adjustment(app_layout):
     assert '0.2.4' == _version
 
 
-def test_basic_root_show(app_layout, capfd):
+def test_basic_root_show(capfd):
     _init_vmn_in_repo()
     app_name = 'root_app/app1'
     ver_info, params = _init_app(app_name, '0.2.1')
@@ -440,8 +439,8 @@ def test_basic_root_show(app_layout, capfd):
 
     app_name = 'root_app/app2'
     _init_app(app_name, '0.2.1')
-    out, err = capfd.readouterr()
 
+    capfd.readouterr()
     _show('root_app', root=True)
     out, err = capfd.readouterr()
     assert '1\n' == out
