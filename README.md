@@ -87,14 +87,20 @@ Actually `vmn` uses this technique for itself.
 
 `vmn` supports stamping of something called a "root app". For example:
 
-`vmn init-app my_root_app/service1`
-`vmn stamp -r patch my_root_app/service1`
+```sh
+vmn init-app my_root_app/service1
+vmn stamp -r patch my_root_app/service1
+```
 
-`vmn init-app my_root_app/service2`
-`vmn stamp -r patch my_root_app/service2`
+```sh
+vmn init-app my_root_app/service2
+vmn stamp -r patch my_root_app/service2
+```
 
-`vmn init-app my_root_app/service3`
-`vmn stamp -r patch my_root_app/service3`
+```sh
+vmn init-app my_root_app/service3
+vmn stamp -r patch my_root_app/service3
+```
 
 Next we'll be able to use `show` to display everything we need:
 
@@ -131,6 +137,7 @@ stamping:
 ```
 
 `vmn show my_root_app/service3` will output `0.0.1`
+
 `vmn show --root my_root_app` will output `5`
 
 ### Configuration
@@ -153,8 +160,10 @@ The template configuration string can be customized and will be applied on the "
 
 For example:
 `vmn show my_root_app/service3` will output `0.0`
+
 however running:
 `vmn show --raw my_root_app/service3` will output `0.0.1`
+
 
 #### Configuration: deps
 In `deps` you can specify other repositories as your dependencies and `vmn` will consider them when stamping and performing `goto`.
