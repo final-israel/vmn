@@ -469,20 +469,3 @@ def test_backward_compatability_with_previous_vmn(app_layout):
 
     ver_info, _ = _stamp_app('app1', 'patch')
     assert ver_info['stamping']['app']['_version'] == '0.0.3'
-
-    # read to clear stderr and out
-    out, err = capfd.readouterr()
-    assert not err
-
-    _show(app_layout.app_name, raw=True)
-
-    out, err = capfd.readouterr()
-    assert '0.0.1\n' == out
-
-    _show(app_layout.app_name, verbose=True)
-
-    out, err = capfd.readouterr()
-    try:
-        yaml.safe_load(out)
-    except Exception:
-        assert False
