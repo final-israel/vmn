@@ -214,7 +214,7 @@ def test_goto_deleted_repos(app_layout):
         assert err == 0
 
 
-def test_basic_root_stamp():
+def test_basic_root_stamp(app_layout):
     _init_vmn_in_repo()
 
     app_name = 'root_app/app1'
@@ -427,7 +427,7 @@ def test_manual_file_adjustment(app_layout):
     assert '0.2.4' == _version
 
 
-def test_basic_root_show(capfd):
+def test_basic_root_show(app_layout, capfd):
     _init_vmn_in_repo()
     app_name = 'root_app/app1'
     ver_info, params = _init_app(app_name, '0.2.1')
