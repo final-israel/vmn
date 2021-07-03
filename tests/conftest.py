@@ -102,7 +102,9 @@ class FSAppLayoutFixture(object):
         import subprocess
         base_cmd = [
             'docker',
-            'run', f'-v {self.repo_path}:/out',
+            'run', '-t', '-v',
+            f'{self.repo_path}:/out', '-v',
+            f'{self.base_dir}:{self.base_dir}',
             'vmn_tester_ubuntu_dockerfile:latest',
             '/stamp_with_previous_vmn.sh'
         ]
