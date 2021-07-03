@@ -129,9 +129,18 @@ class IVersionsStamper(object):
         #TODO: refactor
         self._hide_zero_hotfix = True
 
+        # TODO: this is ugly
+        root_context = self._root_app_name == self._name
         self.ver_info_form_repo = \
-            self.backend.get_vmn_version_info(self._name)
+            self.backend.get_vmn_version_info(
+                self._name,
+                root_context
+            )
         self.tracked = self.ver_info_form_repo is not None
+
+        if root_context:
+            return
+
         if self.tracked:
             self._previous_prerelease = self.ver_info_form_repo['stamping']['app']["prerelease"]
             self._prerelease_count = \
@@ -1046,7 +1055,7 @@ def show(vcs, params, version=None):
 
         return 1
 
-    data = ver_info['stamping']['app']
+    # TODO: refactor
     if params['root']:
         data = ver_info['stamping']['root_app']
         if not data:
@@ -1058,6 +1067,14 @@ def show(vcs, params, version=None):
 
             return 1
 
+        if params.get('verbose'):
+            yaml.dump(data, sys.stdout)
+        else:
+            print(data['version'])
+
+        return 0
+
+    data = ver_info['stamping']['app']
     if params.get('verbose'):
         yaml.dump(data, sys.stdout)
     elif params.get('raw'):
@@ -1146,7 +1163,10 @@ def _retrieve_version_info(params, vcs, version):
 
     try:
         if version is None:
-            ver_info = vcs.backend.get_vmn_version_info(params['name'])
+            ver_info = vcs.backend.get_vmn_version_info(
+                params['name'],
+                params['root'],
+            )
         else:
             ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
     except:
@@ -1308,11 +1328,11 @@ def _goto_version(deps, root):
         )
 
 
-def build_world(name, working_dir, root, release_mode, prerelease):
+def build_world(name, working_dir, root_context, release_mode, prerelease):
     params = {
         'name': name,
         'working_dir': working_dir,
-        'root': root,
+        'root': root_context,
         'release_mode': release_mode,
         'prerelease': prerelease,
         'buildmetadata': None,
@@ -1348,12 +1368,11 @@ def build_world(name, working_dir, root, release_mode, prerelease):
     params['app_conf_path'] = app_conf_path
     params['repo_name'] = os.path.basename(root_path)
 
-    if root:
+    if root_context:
         root_app_name = name
     else:
         root_app_name = params['name'].split('/')
         if len(root_app_name) == 1:
-            #TODO: how can we get here?
             root_app_name = None
         else:
             root_app_name = '/'.join(root_app_name[:-1])

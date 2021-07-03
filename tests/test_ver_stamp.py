@@ -67,12 +67,14 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
         return (ver_info, vmn_ctx.params)
 
 
-def _show(app_name, verbose=None, raw=None):
+def _show(app_name, verbose=None, raw=None, root=False):
     args_list = ['show']
     if verbose is not None:
         args_list.append('--verbose')
     if raw is not None:
         args_list.append('--raw')
+    if root:
+        args_list.append('--root')
 
     args_list.append(app_name)
 
@@ -392,100 +394,54 @@ def test_get_version_number_from_file(app_layout):
 
 
 def test_read_version_from_file(app_layout):
-    params = copy.deepcopy(app_layout.params)
-    params = vmn.build_world(params['name'], params['working_dir'])
-    vmn._handle_init(params)
-    params['release_mode'] = 'patch'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '0.1.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
-    file_path = '{}/{}'.format(params.get('app_dir_path'), vmn.VER_FILE_NAME)
+    _init_vmn_in_repo()
+    _, params = _init_app(app_layout.app_name, '0.2.1')
+
+    file_path = params['version_file_path']
+
+    assert vmn.VersionControlStamper.get_version_number_from_file(
+        file_path) == '0.2.1'
+
     app_layout.write_file_commit_and_push('test_repo', 'f1.file', 'msg1')
     app_layout._app_backend._origin.pull(rebase=True)
-    vmn.stamp(vcs, params)
     with open(file_path, 'r') as fid:
         ver_dict = yaml.load(fid)
-    assert '0.1.2' == ver_dict.get('last_stamped_version')
 
-
-def test_system_backward_comp_file_vs_commit(app_layout):
-    params = copy.deepcopy(app_layout.params)
-    params = vmn.build_world(params['name'], params['working_dir'])
-    vmn._handle_init(params)
-    params['release_mode'] = 'patch'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '0.1.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
-    file_path = '{}/{}'.format(params.get('app_dir_path'), vmn.VER_FILE_NAME)
-    app_layout.remove_app_version_file(file_path)
-    # in this point we simulate the case were using an old vmn that searches for version numbers in commit message,
-    # but stamping with the new method (write and read from file)
-    vmn.stamp(vcs, params)
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    _version = ver_info['stamping']['app']['_version']
-    assert '0.1.2' == _version
-    with open(file_path, 'r') as fid:
-        ver_dict = yaml.load(fid)
-    assert '0.1.2' == ver_dict.get('last_stamped_version')
+    assert '0.2.1' == ver_dict['version_to_stamp_from']
 
 
 def test_manual_file_adjustment(app_layout):
-    params = copy.deepcopy(app_layout.params)
-    params = vmn.build_world(params['name'], params['working_dir'])
-    vmn._handle_init(params)
-    params['release_mode'] = 'patch'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '0.1.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
-    file_path = '{}/{}'.format(params.get('app_dir_path'), vmn.VER_FILE_NAME)
+    _init_vmn_in_repo()
+    _, params = _init_app(app_layout.app_name, '0.2.1')
+
+    file_path = params['version_file_path']
+
     app_layout.remove_app_version_file(file_path)
     # now we want to override the version by changing the file version:
-    app_layout.write_file_commit_and_push('test_repo',
-                                          '.vmn/test_app/{}'.format(vmn.VER_FILE_NAME),
-                                          'last_stamped_version: 0.2.3')
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
+    app_layout.write_file_commit_and_push(
+        'test_repo',
+        '.vmn/test_app/{}'.format(vmn.VER_FILE_NAME),
+        'version_to_stamp_from: 0.2.3')
+
+    ver_info, _ = _stamp_app(app_layout.app_name, 'patch')
     _version = ver_info['stamping']['app']['_version']
     assert '0.2.4' == _version
 
 
-def test_basic_root_show(app_layout,capfd):
-    params = copy.deepcopy(app_layout.params)
-    params = vmn.build_world('root_app/app1', params['working_dir'])
-    vmn._handle_init(params)
-
-    params['release_mode'] = 'patch'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '0.0.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
-
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
+def test_basic_root_show(app_layout, capfd):
+    _init_vmn_in_repo()
+    app_name = 'root_app/app1'
+    ver_info, params = _init_app(app_name, '0.2.1')
     data = ver_info['stamping']['app']
-    assert data['version'] == '0.0.1'
+    assert data['_version'] == '0.2.1'
 
     data = ver_info['stamping']['root_app']
-    assert data['version'] == 1
+    assert data['version'] == 0
 
-    app2_params = vmn.build_world('root_app/app2', params['working_dir'])
-
-    app2_params['release_mode'] = 'minor'
-    app2_params['prerelease'] = 'release'
-    app2_params['buildmetadata'] = None
-    app2_params['starting_version'] = '0.0.0'
-    vcs = vmn.VersionControlStamper(app2_params)
-    vmn.stamp(vcs, app2_params)
-
-    params['root'] = True
-    vcs = vmn.VersionControlStamper(params)
-    vmn.show(vcs, params)
+    app_name = 'root_app/app2'
+    _init_app(app_name, '0.2.1')
     out, err = capfd.readouterr()
-    assert '2\n' == out
+
+    _show('root_app', root=True)
+    out, err = capfd.readouterr()
+    assert '1\n' == out
