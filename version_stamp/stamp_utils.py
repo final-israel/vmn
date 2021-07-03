@@ -221,7 +221,7 @@ class VersionControlBackend(object):
 
         formatted_version = ''
         for octat in octats:
-            if f'{octat}_template' in template and gdict[octat] is not None:
+            if f'{octat}_template' in template and template[f'{octat}_template'] is not None:
                 d = {octat: gdict[octat]}
                 formatted_version = \
                     f"{formatted_version}" \
@@ -502,7 +502,12 @@ class GitBackend(VersionControlBackend):
                 'Failed to fetch tags'
             )
 
-    def get_vmn_version_info(self, app_name):
+    def get_vmn_version_info(self, app_name, root=False):
+        if root:
+            regex = VMN_ROOT_TAG_REGEX
+        else:
+            regex = VMN_TAG_REGEX
+
         tag_formated_app_name = VersionControlBackend.get_tag_formatted_app_name(
             app_name
         )
@@ -510,7 +515,7 @@ class GitBackend(VersionControlBackend):
         cleaned_app_tags = []
         for tag in app_tags:
             match = re.search(
-                VMN_TAG_REGEX,
+                regex,
                 tag
             )
             if match is None:
@@ -519,7 +524,8 @@ class GitBackend(VersionControlBackend):
                 )
 
             gdict = match.groupdict()
-            if gdict['app_name'] != app_name:
+
+            if gdict['app_name'] != app_name.replace('/', '-'):
                 continue
 
             cleaned_app_tags.append(tag)
@@ -530,12 +536,13 @@ class GitBackend(VersionControlBackend):
         return self.get_vmn_tag_version_info(cleaned_app_tags[0])
 
     def get_vmn_tag_version_info(self, tag_name):
-        commit_tag_obj = self._be.commit(tag_name)
+        try:
+            commit_tag_obj = self._be.commit(tag_name)
+        except:
+            return None
+
         if commit_tag_obj.author.name != VMN_USER_NAME:
             raise RuntimeError(f'Corrupted tag {tag_name}: author name is not vmn')
-
-        if commit_tag_obj is None:
-            return None
 
         # TODO:: Check API commit version
         # TODO: check if newer vmn has stamped here

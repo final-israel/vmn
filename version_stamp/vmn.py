@@ -46,8 +46,8 @@ class VMNContextMAnagerManager(object):
             initial_params['name'] = self.args.name
         if 'release_mode' in self.args and self.args.release_mode:
             initial_params['release_mode'] = self.args.release_mode
-        if 'prerelease' in self.args and self.args.prerelease:
-            initial_params['prerelease'] = self.args.prerelease
+        if 'pr' in self.args and self.args.pr:
+            initial_params['prerelease'] = self.args.pr
 
         params = build_world(
             initial_params['name'],
@@ -603,13 +603,7 @@ class VersionControlStamper(IVersionsStamper):
                 f"However no version information for root was found"
             )
 
-        ver_info = self.backend.get_vmn_version_info(
-            self._root_app_name
-        )
-        if ver_info is None:
-            old_version = 0
-        else:
-            old_version = ver_info['stamping']['root_app']["version"]
+        old_version = self.ver_info_form_repo['stamping']['root_app']["version"]
 
         if override_version is None:
             override_version = old_version
@@ -934,7 +928,7 @@ def _init_app(versions_be_ifc, params, starting_version):
             )
 
         ver_info = versions_be_ifc.backend.get_vmn_version_info(
-            versions_be_ifc._root_app_name
+            versions_be_ifc._root_app_name, root=True
         )
         if ver_info:
             root_app_version = int(ver_info['stamping']['root_app']["version"]) + 1
@@ -1145,10 +1139,17 @@ def _retrieve_version_info(params, vcs, version):
         params['name'],
         version,
     )
-    if version is None:
-        ver_info = vcs.backend.get_vmn_version_info(params['name'])
-    else:
-        ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
+
+    try:
+        if version is None:
+            ver_info = vcs.backend.get_vmn_version_info(params['name'])
+        else:
+            ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
+    except:
+        return None, None
+
+    if ver_info is None:
+        return None, None
 
     return tag_name, ver_info
 
@@ -1328,7 +1329,7 @@ def build_world(name, working_dir, root, release_mode, prerelease):
     app_dir_path = os.path.join(
         root_path,
         '.vmn',
-        params['name'],
+        params['name'].replace('/', os.sep),
     )
     params['app_dir_path'] = app_dir_path
 
@@ -1344,6 +1345,7 @@ def build_world(name, working_dir, root, release_mode, prerelease):
     else:
         root_app_name = params['name'].split('/')
         if len(root_app_name) == 1:
+            #TODO: how can we get here?
             root_app_name = None
         else:
             root_app_name = '/'.join(root_app_name[:-1])

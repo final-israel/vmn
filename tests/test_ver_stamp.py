@@ -31,6 +31,16 @@ def _init_app(app_name, starting_version='0.0.0'):
         assert len(vmn_ctx.vcs.actual_deps_state) == 1
 
 
+def _release_app(app_name, version):
+    with vmn.VMNContextMAnagerManager(['release', '-v', version, app_name]) as vmn_ctx:
+        err = vmn._handle_release(vmn_ctx)
+        assert err == 0
+
+        ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_name)
+
+        return (ver_info, vmn_ctx.params)
+
+
 def _stamp_app(app_name, release_mode=None, prerelease=None):
     args_list = ['stamp']
     if release_mode is not None:
@@ -219,275 +229,107 @@ def test_basic_root_stamp(app_layout):
     data = ver_info['stamping']['app']
     assert data['_version'] == '0.1.0'
     data = ver_info['stamping']['root_app']
-    assert data['version'] == 2
+    assert data['version'] == 3
 
 
 def test_starting_version(app_layout):
-    params = copy.deepcopy(app_layout.params)
-    params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['actual_deps_state']) == 1
-    vmn._handle_init(params)
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name, '1.2.3')
 
-    params['release_mode'] = 'minor'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '1.2.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
-
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
+    ver_info, _ = _stamp_app(app_layout.app_name, 'minor')
     data = ver_info['stamping']['app']
-    assert data['version'] == '1.3.0'
+    assert data['_version'] == '1.3.0'
 
 
 def test_rc_stamping(app_layout):
-    params = copy.deepcopy(app_layout.params)
-    params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['actual_deps_state']) == 1
-    vmn._handle_init(params)
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name, '1.2.3')
 
-    params['prerelease'] = 'rc'
-    params['buildmetadata'] = None
-    for i in range(2):
-        params['release_mode'] = 'minor'
-        params['starting_version'] = '1.2.0'
-        vcs = vmn.VersionControlStamper(params)
-        vmn.stamp(vcs, params)
+    ver_info, _ = _stamp_app(
+        app_layout.app_name,
+        release_mode='minor',
+        prerelease='rc',
+    )
 
-        ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-        del vcs
-        data = ver_info['stamping']['app']
-        assert data['version'] == '1.3.0-rc1'
+    data = ver_info['stamping']['app']
+    assert data['_version'] == '1.3.0-rc1'
 
     app_layout.write_file_commit_and_push(
         'test_repo', 'f1.file', 'msg1'
     )
-    params['prerelease'] = 'rc'
-    params['buildmetadata'] = None
-    params['release_mode'] = None
-    params['starting_version'] = '1.2.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
-
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
+    ver_info, _ = _stamp_app(
+        app_layout.app_name,
+        prerelease='rc',
+    )
     data = ver_info['stamping']['app']
-    assert data['version'] == '1.3.0-rc2'
+    assert data['_version'] == '1.3.0-rc2'
 
     app_layout.write_file_commit_and_push(
         'test_repo', 'f1.file', 'msg1'
     )
-    params['prerelease'] = 'beta'
-    params['buildmetadata'] = None
-    params['release_mode'] = None
-    params['starting_version'] = '0.0.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
-
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
+    ver_info, _ = _stamp_app(
+        app_layout.app_name,
+        prerelease='beta',
+    )
     data = ver_info['stamping']['app']
-    assert data['version'] == '1.3.0-beta1'
+    assert data['_version'] == '1.3.0-beta1'
 
     app_layout.write_file_commit_and_push(
         'test_repo', 'f1.file', 'msg1'
     )
-    params['prerelease'] = None
-    params['buildmetadata'] = None
-    params['release_mode'] = None
-    params['starting_version'] = '0.0.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
 
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
+    ver_info, _ = _stamp_app(app_layout.app_name)
+    data = ver_info['stamping']['app']
+    assert data['_version'] == '1.3.0-beta2'
+
+    ver_info, _ = _release_app(app_layout.app_name, '1.3.0-beta2')
 
     data = ver_info['stamping']['app']
-    assert data['version'] == '1.3.0-beta2'
-
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['release_mode'] = None
-    params['starting_version'] = '0.0.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    data = ver_info['stamping']['app']
-    assert data['version'] == '1.3.0'
+    assert data['_version'] == '1.3.0'
 
 
 def test_version_template(app_layout):
-    params = copy.deepcopy(app_layout.params)
-    params = vmn.build_world(params['name'], params['working_dir'])
-    vmn._handle_init(params)
+    formated_version = \
+        stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
+            '2.0.9',
+            vmn.IVersionsStamper.parse_template("[{major}]")
+        )
 
-    params['release_mode'] = 'minor'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '1.2.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
-
-    configured_template = None
-    with open(params['app_conf_path'], 'r') as f:
-        data = yaml.safe_load(f)
-        semver_template = data['conf']['semver_template']
-        hotfix_template = data['conf']['hotfix_template']
-        prerelease_template = data['conf']['prerelease_template']
-        buildmetadata_template = data['conf']['buildmetadata_template']
-
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    data = ver_info['stamping']['app']
-    assert data['version'] == '1.3.0'
-    vcs._version_template, \
-    vcs._semver_template, \
-    vcs._hotfix_template, \
-    vcs._prerelease_template, \
-    vcs._buildmetadata_template = vmn.IVersionsStamper.parse_template(
-        semver_template,
-        hotfix_template,
-        prerelease_template,
-        buildmetadata_template,
-    )
-    formated_version = vcs.get_utemplate_formatted_version('1.3.0')
-    assert data['version'] == formated_version
-
-    semver_template = 'ap{major}xx{major}XX{minor}AC@{major}{patch}C'
-    hotfix_template = '_{hotfix}'
-    prerelease_template = '-{prerelease}'
-    buildmetadata_template = '+{buildmetadata}'
-    vcs._version_template, \
-    vcs._semver_template, \
-    vcs._hotfix_template, \
-    vcs._prerelease_template, \
-    vcs._buildmetadata_template = vmn.IVersionsStamper.parse_template(
-        semver_template,
-        hotfix_template,
-        prerelease_template,
-        buildmetadata_template,
-    )
-
-    formated_version = vcs.get_utemplate_formatted_version('2.0.9')
-    assert formated_version == 'ap2xxXX0AC@9C'
-
-    app_layout.write_file_commit_and_push(
-        'test_repo', 'f1.file', 'msg1'
-    )
-    params['release_mode'] = 'minor'
-    params['prerelease'] = 'dev'
-    params['buildmetadata'] = None
-    vcs = vmn.VersionControlStamper(params)
-    semver_template = 'ap{major}.{minor}.@{patch}'
-    hotfix_template = '_{hotfix}'
-    prerelease_template = '-{prerelease}'
-    buildmetadata_template = '+{buildmetadata}'
-    vcs._version_template, \
-    vcs._semver_template, \
-    vcs._hotfix_template, \
-    vcs._prerelease_template, \
-    vcs._buildmetadata_template = vmn.IVersionsStamper.parse_template(semver_template,
-        hotfix_template,
-        prerelease_template,
-        buildmetadata_template,
-    )
-    vmn.stamp(vcs, params)
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    data = ver_info['stamping']['app']
-    assert data['version'] == 'ap1.4.@0-dev1'
-
-    params['release_mode'] = None
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    vcs = vmn.VersionControlStamper(params)
-    semver_template = 'ap{major}.{minor}.@{patch}'
-    hotfix_template = '_{hotfix}'
-    prerelease_template = '-{prerelease}'
-    buildmetadata_template = '+{buildmetadata}'
-    vcs._version_template, \
-    vcs._semver_template, \
-    vcs._hotfix_template, \
-    vcs._prerelease_template, \
-    vcs._buildmetadata_template = vmn.IVersionsStamper.parse_template(
-        semver_template,
-        hotfix_template,
-        prerelease_template,
-        buildmetadata_template,
-    )
-    vmn.stamp(vcs, params)
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    data = ver_info['stamping']['app']
-    assert data['version'] == 'ap1.4.@0'
-
-    app_layout.write_file_commit_and_push(
-        'test_repo', 'f1.file', 'msg2'
-    )
-    params['release_mode'] = 'minor'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    data = ver_info['stamping']['app']
-    assert data['version'] == '1.5.0'
-
-    semver_template = 'ap{major}xx{minor}XX{patch}AC@{major}'
-    hotfix_template = '-{hotfix}'
-    prerelease_template = 'ABC{prerelease}'
-    buildmetadata_template = 'AA{buildmetadata}C'
-    vcs._version_template, \
-    vcs._semver_template, \
-    vcs._hotfix_template, \
-    vcs._prerelease_template, \
-    vcs._buildmetadata_template = vmn.IVersionsStamper.parse_template(semver_template,
-        hotfix_template,
-        prerelease_template,
-        buildmetadata_template,
-    )
-    formated_version = vcs.get_utemplate_formatted_version('2.0.9-alpha.3')
-    assert formated_version == 'ap2xx0XX9AC@ABCalpha.3'
+    assert formated_version == '2'
 
 
 def test_basic_goto(app_layout):
-    params = copy.deepcopy(app_layout.params)
-    params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['actual_deps_state']) == 1
-    vmn._handle_init(params)
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name, '1.2.3')
 
-    params = vmn.build_world(params['name'], params['working_dir'])
-    params['release_mode'] = 'patch'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '0.0.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
-
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    data = ver_info['stamping']['app']
-    assert data['version'] == '0.0.1'
+    ver_info, _ = _stamp_app(app_layout.app_name, 'minor')
 
     app_layout.write_file_commit_and_push('test_repo', 'a.yxy', 'msg')
 
-    params = vmn.build_world(params['name'], params['working_dir'])
-    params['release_mode'] = 'patch'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '1.0.0'
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
-
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
+    ver_info, _ = _stamp_app(app_layout.app_name, 'patch')
     data = ver_info['stamping']['app']
-    assert data['version'] == '0.0.2'
+    assert data['_version'] == '1.3.1'
 
     c1 = app_layout._app_backend.be.changeset()
-    params['deps_only'] = False
-    vcs = vmn.VersionControlStamper(params)
-    assert vmn.goto_version(vcs, params, '1.0.1') == 1
-    assert vmn.goto_version(vcs, params, '0.0.1') == 0
+    with vmn.VMNContextMAnagerManager(['goto', '-v', '0.0.2', app_layout.app_name]) as vmn_ctx:
+        err = vmn._handle_goto(vmn_ctx)
+        assert err == 1
+    with vmn.VMNContextMAnagerManager(['goto', '-v', '1.3.0', app_layout.app_name]) as vmn_ctx:
+        err = vmn._handle_goto(vmn_ctx)
+        assert err == 0
+
     c2 = app_layout._app_backend.be.changeset()
     assert c1 != c2
-    assert vmn.goto_version(vcs, params, '0.0.2') == 0
+    with vmn.VMNContextMAnagerManager(['goto', '-v', '1.3.1', app_layout.app_name]) as vmn_ctx:
+        err = vmn._handle_goto(vmn_ctx)
+        assert err == 0
     c3 = app_layout._app_backend.be.changeset()
     assert c1 == c3
 
-    assert vmn.goto_version(vcs, params, None) == 0
+    with vmn.VMNContextMAnagerManager(['goto', app_layout.app_name]) as vmn_ctx:
+        err = vmn._handle_goto(vmn_ctx)
+        assert err == 0
+
     c4 = app_layout._app_backend.be.changeset()
     assert c1 == c4
 
