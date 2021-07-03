@@ -102,16 +102,17 @@ class FSAppLayoutFixture(object):
         import subprocess
         base_cmd = [
             'docker',
-            'run', '-t', '-v',
+            'run', '-t',
+            #f'-u{os.getuid()}:{os.getgid()}',
+            '-v',
             f'{self.repo_path}:/out', '-v',
             f'{self.base_dir}:{self.base_dir}',
-            'vmn_tester_ubuntu_dockerfile:latest',
+            'previous_vmn_stamper:latest',
             '/stamp_with_previous_vmn.sh'
         ]
 
         LOGGER.info('going to run: {}'.format(' '.join(base_cmd)))
         subprocess.call(base_cmd, cwd=self.repo_path)
-
 
     def write_file_commit_and_push(self, repo_name, file_relative_path, content):
         if repo_name not in self._repos:

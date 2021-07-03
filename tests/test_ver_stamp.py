@@ -448,6 +448,7 @@ def test_basic_root_show(app_layout, capfd):
 
 def test_backward_compatability_with_previous_vmn(app_layout):
     app_layout.stamp_with_previous_vmn()
+    _init_app('app1', '0.0.3')
 
     ver_info, _ = _stamp_app('app1', 'patch')
     assert ver_info['stamping']['app']['_version'] == '0.0.3'
