@@ -98,6 +98,19 @@ class FSAppLayoutFixture(object):
         subprocess.call(base_cmd, cwd=self.repo_path)
         subprocess.call(['git', 'commit', '-m', 'Merge {} in {}'.format(from_rev, to_rev)], cwd=self.repo_path)
 
+    def stamp_with_previous_vmn(self):
+        import subprocess
+        base_cmd = [
+            'docker',
+            'run', f'-v {self.repo_path}:/out',
+            'vmn_tester_ubuntu_dockerfile:latest',
+            '/stamp_with_previous_vmn.sh'
+        ]
+
+        LOGGER.info('going to run: {}'.format(' '.join(base_cmd)))
+        subprocess.call(base_cmd, cwd=self.repo_path)
+
+
     def write_file_commit_and_push(self, repo_name, file_relative_path, content):
         if repo_name not in self._repos:
             raise RuntimeError('repo {0} not found'.format(repo_name))

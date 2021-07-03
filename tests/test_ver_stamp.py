@@ -444,3 +444,45 @@ def test_basic_root_show(capfd):
     _show('root_app', root=True)
     out, err = capfd.readouterr()
     assert '1\n' == out
+
+
+def test_manual_file_adjustment(app_layout):
+    _init_vmn_in_repo()
+    _, params = _init_app(app_layout.app_name, '0.2.1')
+
+    file_path = params['version_file_path']
+
+    app_layout.remove_app_version_file(file_path)
+    # now we want to override the version by changing the file version:
+    app_layout.write_file_commit_and_push(
+        'test_repo',
+        '.vmn/test_app/{}'.format(vmn.VER_FILE_NAME),
+        'version_to_stamp_from: 0.2.3')
+
+    ver_info, _ = _stamp_app(app_layout.app_name, 'patch')
+    _version = ver_info['stamping']['app']['_version']
+    assert '0.2.4' == _version
+
+
+def test_backward_compatability_with_previous_vmn(app_layout):
+    app_layout.stamp_with_previous_vmn()
+
+    ver_info, _ = _stamp_app('app1', 'patch')
+    assert ver_info['stamping']['app']['_version'] == '0.0.3'
+
+    # read to clear stderr and out
+    out, err = capfd.readouterr()
+    assert not err
+
+    _show(app_layout.app_name, raw=True)
+
+    out, err = capfd.readouterr()
+    assert '0.0.1\n' == out
+
+    _show(app_layout.app_name, verbose=True)
+
+    out, err = capfd.readouterr()
+    try:
+        yaml.safe_load(out)
+    except Exception:
+        assert False

@@ -1,0 +1,9 @@
+ARG distro_var
+FROM ubuntu:focal
+RUN apt update && apt install -y python3-pip git
+COPY stamp_with_previous_vmn.sh /
+
+RUN git config --global user.email "you@example.com"
+RUN git config --global user.name "Your Name"
+
+RUN pip3 install vmn
