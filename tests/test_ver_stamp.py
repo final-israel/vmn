@@ -28,7 +28,12 @@ def _init_app(app_name, starting_version='0.0.0'):
     ) as vmn_ctx:
         err = vmn._handle_init_app(vmn_ctx)
         assert err == 0
+        # TODO: why validating this?
         assert len(vmn_ctx.vcs.actual_deps_state) == 1
+
+        ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_name)
+
+        return (ver_info, vmn_ctx.params)
 
 
 def _release_app(app_name, version):
@@ -335,78 +340,55 @@ def test_basic_goto(app_layout):
 
 
 def test_stamp_on_branch_merge_squash(app_layout):
-    params = copy.deepcopy(app_layout.params)
-    params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['actual_deps_state']) == 1
-    vmn._handle_init(params)
-    params = vmn.build_world(params['name'], params['working_dir'])
-    params['release_mode'] = 'patch'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '0.0.0'
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name, '1.2.3')
+
+    ver_info, _ = _stamp_app(app_layout.app_name, 'minor')
     app_layout._app_backend.be.checkout(('-b', 'new_branch'))
     app_layout.write_file_commit_and_push('test_repo', 'f1.file', 'msg1')
     app_layout._app_backend._origin.pull(rebase=True)
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)  # first stamp 0.0.1
-    app_layout.write_file_commit_and_push('test_repo', 'f2.file', 'msg2')
+    ver_info, _ = _stamp_app(app_layout.app_name, 'patch')
+
     app_layout._app_backend._origin.pull(rebase=True)
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)  # 0.0.2
+    ver_info, _ = _stamp_app(app_layout.app_name, 'patch')
     app_layout.write_file_commit_and_push('test_repo', 'f3.file', 'msg3')
     app_layout._app_backend._origin.pull(rebase=True)
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)  # 0.0.3
+    ver_info, _ = _stamp_app(app_layout.app_name, 'patch')
     app_layout._app_backend.be.checkout('master')
     app_layout.merge(from_rev='new_branch', to_rev='master', squash=True)
     app_layout._app_backend._origin.pull(rebase=True)
 
     app_layout._app_backend.be.push()
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
 
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
+    ver_info, _ = _stamp_app(app_layout.app_name, 'patch')
     data = ver_info['stamping']['app']
 
-    assert data['version'] == '0.0.4'
+    assert data['_version'] == '1.3.3'
 
 
 def test_get_version(app_layout):
-    params = copy.deepcopy(app_layout.params)
-    params = vmn.build_world(params['name'], params['working_dir'])
-    vmn._handle_init(params)
-    params['release_mode'] = 'patch'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '0.0.0'
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name)
+
     app_layout._app_backend.be.checkout(('-b', 'new_branch'))
     app_layout.write_file_commit_and_push('test_repo', 'f1.file', 'msg1')
     app_layout._app_backend._origin.pull(rebase=True)
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)  # first stamp 0.0.1
+    ver_info, _ = _stamp_app(app_layout.app_name, 'patch')
     app_layout._app_backend.be.checkout('master')
     app_layout.merge(from_rev='new_branch', to_rev='master', squash=True)
     app_layout._app_backend._origin.pull(rebase=True)
     app_layout._app_backend.be.push()
-    vmn.stamp(vcs, params)
-    ver_info = vcs.get_vmn_version_info(app_name=params['name'])
+    ver_info, _ = _stamp_app(app_layout.app_name, 'patch')
     data = ver_info['stamping']['app']
-    assert data['version'] == '0.0.2'
+    assert data['_version'] == '0.0.2'
 
 
 def test_get_version_number_from_file(app_layout):
-    params = copy.deepcopy(app_layout.params)
-    params = vmn.build_world(params['name'], params['working_dir'])
-    vmn._handle_init(params)
-    params['release_mode'] = 'patch'
-    params['prerelease'] = 'release'
-    params['buildmetadata'] = None
-    params['starting_version'] = '0.2.0'
-    # just to create the relative folder tree,
-    # I.E: .vmn/app_name/last_known_app_version.yml
-    vcs = vmn.VersionControlStamper(params)
-    vmn.stamp(vcs, params)
-    assert vcs.get_version_number_from_file() == '0.2.1'
+    _init_vmn_in_repo()
+    _, params = _init_app(app_layout.app_name, '0.2.1')
+
+    assert vmn.VersionControlStamper.get_version_number_from_file(
+        params['version_file_path']) == '0.2.1'
 
 
 def test_read_version_from_file(app_layout):

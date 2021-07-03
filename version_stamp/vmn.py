@@ -117,9 +117,7 @@ class IVersionsStamper(object):
         self._root_app_conf_path = conf['root_app_conf_path']
         self._root_app_dir_path = conf['root_app_dir_path']
         self._extra_info = conf['extra_info']
-        self._version_file_path = os.path.join(
-            self._app_dir_path, VER_FILE_NAME
-        )
+        self._version_file_path = conf['version_file_path']
 
         self.template = IVersionsStamper.parse_template(conf['template'])
 
@@ -404,23 +402,27 @@ class VersionControlStamper(IVersionsStamper):
 
         return None
 
-    def get_version_number_from_file(self) -> str or None:
+    @staticmethod
+    def get_version_number_from_file(version_file_path) -> str or None:
         try:
-            with open(self._version_file_path, 'r') as fid:
+            with open(version_file_path, 'r') as fid:
                 ver_dict = yaml.safe_load(fid)
             return ver_dict.get('version_to_stamp_from')
         except FileNotFoundError as e:
             LOGGER.debug('could not find version file: {}'.format(
-                self._version_file_path)
+                version_file_path)
             )
             LOGGER.debug('{}'.format(e))
+
             return None
 
     def add_to_version(self):
         if not self._buildmetadata:
             raise RuntimeError("TODO xxx")
 
-        old_version = self.get_version_number_from_file()
+        old_version = VersionControlStamper.get_version_number_from_file(
+            self._version_file_path
+        )
 
         self._should_publish = False
         # TODO: get tag name from version
@@ -525,7 +527,9 @@ class VersionControlStamper(IVersionsStamper):
             self,
             override_current_version=None,
     ):
-        version_to_start_from = self.get_version_number_from_file()
+        version_to_start_from = VersionControlStamper.get_version_number_from_file(
+            self._version_file_path
+        )
         if override_current_version is None:
             override_current_version = version_to_start_from
 
@@ -755,7 +759,7 @@ def _handle_init(vmn_ctx):
     be.commit(
         message=stamp_utils.INIT_COMMIT_MESSAGE,
         user='vmn',
-        include=[vmn_path, vmn_unique_path, git_ignore_path]
+        include=[vmn_unique_path, git_ignore_path]
     )
     be.push()
 
@@ -1332,6 +1336,10 @@ def build_world(name, working_dir, root, release_mode, prerelease):
         params['name'].replace('/', os.sep),
     )
     params['app_dir_path'] = app_dir_path
+
+    params['version_file_path'] = os.path.join(
+        app_dir_path, VER_FILE_NAME
+    )
 
     app_conf_path = os.path.join(
         app_dir_path,
