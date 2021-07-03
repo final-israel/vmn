@@ -17,8 +17,9 @@ A simple package for auto increasing version numbers of any application agnostic
 ```sh
 cd to/your/repository
 vmn -h
+```
 
-
+```sh
 ## Needed only once per repository.
 vmn init
 
@@ -30,6 +31,7 @@ vmn stamp -r patch <app-name>
 
 # example for starting from version 1.6.8
 vmn init-app -v 1.6.8 <app-name2>
+
 # will stamp 1.7.0
 vmn stamp -r minor <app-name2>
 ```
@@ -37,22 +39,23 @@ vmn stamp -r minor <app-name2>
 ### Release candidates
 
 ```sh
-cd to/your/repository
 vmn init-app -v 1.6.8 <app-name>
+
 # will stamp 2.0.0-alpha1
 vmn stamp -r major --pr alpha <app-name>
+
 # will stamp 2.0.0-alpha2
 vmn stamp --pr alpha <app-name>
+
 # will stamp 2.0.0-mybeta1
 vmn stamp --pr mybeta <app-name>
-# Run release when you ready - will stamp 2.0.0
+
+# Run release when you ready - will stamp 2.0.0 (from the same tag)
 vmn release -v 2.0.0-mybeta1 <app-name>
 ```
 ### show
 
 ```sh
-cd to/your/repository
-
 vmn show <app-name>
 vmn show --verbose <app-name>
 vmn show -v 1.0.1 <app-name>
@@ -61,7 +64,6 @@ vmn show -v 1.0.1 <app-name>
 ### goto
 
 ```sh
-cd to/your/repository
 vmn goto -v 1.0.1 <app-name>
 ```
 
@@ -85,10 +87,13 @@ Actually `vmn` uses this technique for itself.
 
 `vmn` supports stamping of something called a "root app". For example:
 
+`vmn init-app my_root_app/service1`
 `vmn stamp -r patch my_root_app/service1`
 
+`vmn init-app my_root_app/service2`
 `vmn stamp -r patch my_root_app/service2`
 
+`vmn init-app my_root_app/service3`
 `vmn stamp -r patch my_root_app/service3`
 
 Next we'll be able to use `show` to display everything we need:
@@ -116,7 +121,7 @@ stamping:
     info: {}
   root_app:
     name: my_root_app
-    version: 3
+    version: 5
     latest_service: my_root_app/service3
     services:
       my_root_app/service1: 0.0.1
@@ -126,7 +131,7 @@ stamping:
 ```
 
 `vmn show my_root_app/service3` will output `0.0.1`
-`vmn show --root my_root_app` will output `3`
+`vmn show --root my_root_app` will output `5`
 
 ### Configuration
 vmn auto generates a `conf.yml` file that can be modified later by the user. An example of `conf.yml` file:
