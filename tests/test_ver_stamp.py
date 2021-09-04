@@ -720,21 +720,19 @@ def test_version_backends(app_layout, capfd):
     app_layout.write_file_commit_and_push(
         "test_repo",
         "Cargo.toml",
-        toml.dumps({
-            "package": {
-                "name": "test_app",
-                "version": "some ignored string",
+        toml.dumps(
+            {
+                "package": {
+                    "name": "test_app",
+                    "version": "some ignored string",
+                }
             }
-        }),
+        ),
     )
 
     conf = {
         "template": "[{major}][.{minor}][.{patch}]",
-        "version_backends": {
-            "cargo": {
-                "path": "Cargo.toml"
-            }
-        },
+        "version_backends": {"cargo": {"path": "Cargo.toml"}},
         "deps": {
             "../": {
                 "test_repo": {
