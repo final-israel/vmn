@@ -148,6 +148,8 @@ class IVersionsStamper(object):
         # TODO: refactor
         self._hide_zero_hotfix = conf["hide_zero_hotfix"]
 
+        self._version_backends = conf["version_backends"]
+
         # TODO: this is ugly
         root_context = self._root_app_name == self._name
         self.ver_info_form_repo = self.backend.get_vmn_version_info(
@@ -314,24 +316,55 @@ class IVersionsStamper(object):
 
         return vmn_version
 
-    @staticmethod
-    def parse_template(template: str) -> object:
-        match = re.search(stamp_utils.VMN_TEMPLATE_REGEX, template)
-
-        gdict = match.groupdict()
-
-        return gdict
-
-    @staticmethod
     def write_version_to_file(
-        file_path: str,
+        self,
         version_number: str,
         prerelease: str,
         prerelease_count: dict,
     ) -> None:
+        self._write_version_to_vmn_version_file(prerelease, prerelease_count, version_number)
+
+        if not self._version_backends:
+            return
+
+        verstr = self.backend.gen_verstr(version_number, prerelease, prerelease_count)
+        verstr = self.backend.get_be_formatted_version(verstr)
+        for backend in self._version_backends:
+            try:
+                if backend == 'vmn_version_file':
+                    LOGGER.warning(
+                        "Remove vmn_version_file version backend from the configuration"
+                    )
+                    continue
+
+                handler = getattr(self, f"_write_version_to_{backend}")
+                handler(verstr)
+            except AttributeError:
+                LOGGER.warning(f"Unsupported version backend {backend}")
+                continue
+
+    def _write_version_to_cargo(self, verstr):
+        import toml
+        backend_conf = self._version_backends["cargo"]
+        file_path = backend_conf["path"]
+
+        try:
+            data = toml.load(file_path)
+            data["package"]["version"] = verstr
+            toml.dump(data, file_path)
+        except IOError as e:
+            LOGGER.error(f"Error writing cargo ver file: {file_path}\n")
+            LOGGER.debug("Exception info: ", exc_info=True)
+
+            raise IOError(e)
+        except Exception as e:
+            LOGGER.debug(e, exc_info=True)
+            raise RuntimeError(e)
+
+    def _write_version_to_vmn_version_file(self, prerelease, prerelease_count, version_number):
+        file_path = self._version_file_path
         if prerelease is None:
             prerelease = "release"
-
         # this method will write the stamped ver of an app to a file,
         # weather the file pre exists or not
         try:
@@ -350,6 +383,15 @@ class IVersionsStamper(object):
         except Exception as e:
             LOGGER.debug(e, exc_info=True)
             raise RuntimeError(e)
+
+    @staticmethod
+    def parse_template(template: str) -> object:
+        match = re.search(stamp_utils.VMN_TEMPLATE_REGEX, template)
+
+        gdict = match.groupdict()
+
+        return gdict
+
 
     def get_deps_changesets(self):
         flat_dependency_repos = []
@@ -616,8 +658,7 @@ class VersionControlStamper(IVersionsStamper):
             initial_prerelease_count,
         )
 
-        VersionControlStamper.write_version_to_file(
-            file_path=self._version_file_path,
+        self.write_version_to_file(
             version_number=current_version,
             prerelease=prerelease,
             prerelease_count=prerelease_count,
@@ -1176,8 +1217,7 @@ def _init_app(versions_be_ifc, params, starting_version):
         return 1
 
     versions_be_ifc.create_config_files(params)
-    VersionControlStamper.write_version_to_file(
-        file_path=versions_be_ifc._version_file_path,
+    versions_be_ifc.write_version_to_file(
         version_number=starting_version,
         prerelease="release",
         prerelease_count={},
@@ -1699,6 +1739,7 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
     actual_deps_state["."]["hash"] = be.last_user_changeset()
     params["actual_deps_state"] = actual_deps_state
     params["hide_zero_hotfix"] = True
+    params["version_backends"] = {}
 
     if not os.path.isfile(app_conf_path):
         return params
@@ -1710,6 +1751,8 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
         params["raw_configured_deps"] = data["conf"]["deps"]
         if "hide_zero_hotfix" in data["conf"]:
             params["hide_zero_hotfix"] = data["conf"]["hide_zero_hotfix"]
+        if "version_backends" in data["conf"]:
+            params["version_backends"] = data["conf"]["version_backends"]
 
         deps = {}
         for rel_path, dep in params["raw_configured_deps"].items():
