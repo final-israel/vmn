@@ -749,9 +749,17 @@ def test_version_backends(app_layout, capfd):
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    with open(params["version_backends"]["cargo"], "r") as f:
+    full_path = os.path.join(
+        params["root_path"],
+        params["version_backends"]["cargo"]["path"],
+    )
+
+    with open(full_path, "r") as f:
         data = toml.load(f)
-        assert data["package"]
+        assert data["package"]["version"] == "0.0.2"
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
 
 
 def test_backward_compatability_with_previous_vmn(app_layout, capfd):

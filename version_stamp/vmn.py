@@ -329,8 +329,8 @@ class IVersionsStamper(object):
         if not self._version_backends:
             return
 
-        verstr = self.backend.gen_verstr(version_number, prerelease, prerelease_count)
-        verstr = self.backend.get_be_formatted_version(verstr)
+        verstr = self.gen_verstr(version_number, prerelease, prerelease_count)
+        verstr = self.get_be_formatted_version(verstr)
         for backend in self._version_backends:
             try:
                 if backend == "vmn_version_file":
@@ -349,12 +349,12 @@ class IVersionsStamper(object):
         import toml
 
         backend_conf = self._version_backends["cargo"]
-        file_path = backend_conf["path"]
-
+        file_path = os.path.join(self._root_path, backend_conf["path"])
         try:
             data = toml.load(file_path)
             data["package"]["version"] = verstr
-            toml.dump(data, file_path)
+            with open(file_path, 'w') as f:
+                toml.dump(data, f)
         except IOError as e:
             LOGGER.error(f"Error writing cargo ver file: {file_path}\n")
             LOGGER.debug("Exception info: ", exc_info=True)
@@ -793,6 +793,11 @@ class VersionControlStamper(IVersionsStamper):
                 self._version_file_path,
             ]
         )
+
+        for backend in self._version_backends:
+            backend_conf = self._version_backends[backend]
+            file_path = os.path.join(self._root_path, backend_conf["path"])
+            version_files.append(file_path)
 
         if self._root_app_name is not None:
             tmp = self.get_files_to_add_to_index([self._root_app_conf_path])
