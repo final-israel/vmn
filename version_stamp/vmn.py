@@ -11,6 +11,7 @@ import pathlib
 from filelock import FileLock
 from multiprocessing import Pool
 import re
+import toml
 from packaging import version as pversion
 
 CUR_PATH = "{0}/".format(os.path.dirname(__file__))
@@ -346,8 +347,6 @@ class IVersionsStamper(object):
                 continue
 
     def _write_version_to_cargo(self, verstr):
-        import toml
-
         backend_conf = self._version_backends["cargo"]
         file_path = os.path.join(self._root_path, backend_conf["path"])
         try:
