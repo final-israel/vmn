@@ -40,12 +40,16 @@ class VMNContextMAnagerManager(object):
         root = False
         if "root" in self.args:
             root = self.args.root
+        from_file = False
+        if 'from_file' in self.args and self.args.from_file:
+            from_file = True
         initial_params = {
             "root": root,
             "cwd": cwd,
             "name": None,
             "release_mode": None,
             "prerelease": None,
+            'from_file': from_file,
         }
 
         if "name" in self.args and self.args.name:
@@ -65,6 +69,7 @@ class VMNContextMAnagerManager(object):
             initial_params["root"],
             initial_params["release_mode"],
             initial_params["prerelease"],
+            initial_params["from_file"],
         )
 
         if params is None:
@@ -94,7 +99,7 @@ class IVersionsStamper(object):
     def __init__(self, conf):
         self._name = conf["name"]
         self._root_path = conf["root_path"]
-        self.backend, _ = stamp_utils.get_client(self._root_path)
+        self.backend = conf["be"]
         self._release_mode = conf["release_mode"]
         self._prerelease = conf["prerelease"]
         self._buildmetadata = conf["buildmetadata"]
@@ -419,7 +424,7 @@ class IVersionsStamper(object):
         return flat_dependency_repos
 
     def get_be_formatted_version(self, version):
-        return stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
+        return stamp_utils.VMNBackend.get_utemplate_formatted_version(
             version, self.template, self._hide_zero_hotfix
         )
 
@@ -487,7 +492,7 @@ class VersionControlStamper(IVersionsStamper):
 
     def find_matching_version(self, version, prerelease, prerelease_count):
         tag_formatted_app_name = (
-            stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
+            stamp_utils.VMNBackend.get_tag_formatted_app_name(
                 self._name,
                 version,
                 prerelease,
@@ -575,7 +580,7 @@ class VersionControlStamper(IVersionsStamper):
         )
 
         self._should_publish = False
-        tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
+        tag_name = stamp_utils.VMNBackend.get_tag_formatted_app_name(
             self._name, old_version
         )
         if self.backend.changeset() != self.backend.changeset(tag=tag_name):
@@ -593,7 +598,7 @@ class VersionControlStamper(IVersionsStamper):
             prerelease,
             _,
             _,
-        ) = stamp_utils.VersionControlBackend.get_tag_properties(tag_name)
+        ) = stamp_utils.VMNBackend.get_tag_properties(tag_name)
 
         if not self._hide_zero_hotfix:
             version = f"{version}.{hotfix}"
@@ -604,7 +609,7 @@ class VersionControlStamper(IVersionsStamper):
 
         version = f"{version}+{self._buildmetadata}"
 
-        tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
+        tag_name = stamp_utils.VMNBackend.get_tag_formatted_app_name(
             self._name, version
         )
 
@@ -618,7 +623,7 @@ class VersionControlStamper(IVersionsStamper):
 
     def release_app_version(self, verstr):
         tag_name = f'{self._name.replace("/", "-")}_{verstr}'
-        props = stamp_utils.VersionControlBackend.get_tag_properties(tag_name)
+        props = stamp_utils.VMNBackend.get_tag_properties(tag_name)
 
         should_append_hotfix = props["hotfix"] is not None
         if should_append_hotfix and self._hide_zero_hotfix:
@@ -1427,7 +1432,7 @@ def show(vcs, params, verstr=None):
             data = data["stamping"]["app"]
             data[
                 "version"
-            ] = stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
+            ] = stamp_utils.VMNBackend.get_utemplate_formatted_version(
                 data["_version"], vcs.template, vcs._hide_zero_hotfix
             )
             print(yaml.dump(data))
@@ -1492,7 +1497,7 @@ def show(vcs, params, verstr=None):
         return 0
 
     data = ver_info["stamping"]["app"]
-    data["version"] = stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
+    data["version"] = stamp_utils.VMNBackend.get_utemplate_formatted_version(
         data["_version"], vcs.template, vcs._hide_zero_hotfix
     )
     if params.get("verbose"):
@@ -1586,7 +1591,7 @@ def _retrieve_version_info(params, vcs, verstr, expected_status, optional_status
                 return None, None, None
         else:
             try:
-                stamp_utils.VersionControlBackend.get_tag_properties(tag_name)
+                stamp_utils.VMNBackend.get_tag_properties(tag_name)
                 tag_name, ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
             except:
                 LOGGER.error(f"Wrong version specified: {verstr}")
@@ -1742,7 +1747,7 @@ def _goto_version(deps, root):
         raise RuntimeError()
 
 
-def build_world(name, working_dir, root_context, release_mode, prerelease):
+def build_world(name, working_dir, root_context, release_mode, prerelease, from_file):
     params = {
         "name": name,
         "working_dir": working_dir,
@@ -1750,16 +1755,35 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
         "release_mode": release_mode,
         "prerelease": prerelease,
         "buildmetadata": None,
+        "from_file": from_file,
     }
 
     # TODO: think how vcs can be used here
     be, err = stamp_utils.get_client(params["working_dir"])
+    params["be"] = be
     if err:
         LOGGER.error("{0}. Exiting".format(err))
-        return None
+        if not from_file:
+            return None
 
-    root_path = os.path.join(be.root())
+        root_path = params["working_dir"]
+    else:
+        root_path = os.path.join(be.root())
+
     params["root_path"] = root_path
+
+    params["raw_configured_deps"] = {
+        os.path.join("../"): {
+            os.path.basename(root_path): {"remote": be.remote(), "vcs_type": be.type()}
+        }
+    }
+    deps = {}
+    for rel_path, dep in params["raw_configured_deps"].items():
+        deps[os.path.join(root_path, rel_path)] = tuple(dep.keys())
+
+    actual_deps_state = HostState.get_actual_deps_state(deps, root_path)
+    actual_deps_state["."]["hash"] = be.last_user_changeset()
+    params["actual_deps_state"] = actual_deps_state
 
     if name is None:
         return params
@@ -1801,24 +1825,11 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
     params["root_app_conf_path"] = root_app_conf_path
     params["root_app_name"] = root_app_name
 
-    params["raw_configured_deps"] = {
-        os.path.join("../"): {
-            os.path.basename(root_path): {"remote": be.remote(), "vcs_type": be.type()}
-        }
-    }
-
     params["template"] = stamp_utils.VMN_DEFAULT_TEMPLATE
 
     params["extra_info"] = False
     params["create_verinfo_files"] = False
 
-    deps = {}
-    for rel_path, dep in params["raw_configured_deps"].items():
-        deps[os.path.join(root_path, rel_path)] = tuple(dep.keys())
-
-    actual_deps_state = HostState.get_actual_deps_state(deps, root_path)
-    actual_deps_state["."]["hash"] = be.last_user_changeset()
-    params["actual_deps_state"] = actual_deps_state
     params["hide_zero_hotfix"] = True
     params["version_backends"] = {}
 
@@ -1843,7 +1854,6 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
 
         actual_deps_state.update(HostState.get_actual_deps_state(deps, root_path))
         params["actual_deps_state"] = actual_deps_state
-        actual_deps_state["."]["hash"] = be.last_user_changeset()
 
     return params
 

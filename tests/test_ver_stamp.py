@@ -538,7 +538,7 @@ def test_rc_goto(app_layout, capfd):
 
 def test_version_template():
     formated_version = (
-        stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
+        stamp_utils.VMNBackend.get_utemplate_formatted_version(
             "2.0.9",
             vmn.IVersionsStamper.parse_template("[{major}][-{prerelease}]"),
             True,
@@ -548,7 +548,7 @@ def test_version_template():
     assert formated_version == "2"
 
     formated_version = (
-        stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
+        stamp_utils.VMNBackend.get_utemplate_formatted_version(
             "2.0.9.0", vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"), True
         )
     )
@@ -556,7 +556,7 @@ def test_version_template():
     assert formated_version == "2"
 
     formated_version = (
-        stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
+        stamp_utils.VMNBackend.get_utemplate_formatted_version(
             "2.0.9.0",
             vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"),
             False,

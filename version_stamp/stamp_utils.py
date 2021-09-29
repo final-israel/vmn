@@ -85,7 +85,7 @@ def init_stamp_logger(debug=False):
     return LOGGER
 
 
-class VersionControlBackend(object):
+class VMNBackend(object):
     def __init__(self, type):
         self._type = type
 
@@ -196,18 +196,27 @@ class VersionControlBackend(object):
         return formatted_version
 
 
-class GitBackend(VersionControlBackend):
-    def __init__(self, repo_path, revert=False, pull=False):
-        VersionControlBackend.__init__(self, "git")
+class LocalFileBackend(VMNBackend):
+    def __init__(self, repo_path):
+        VMNBackend.__init__(self, "local_file")
+
+        if not os.path.isdir(os.path.join(repo_path, '.vmn')):
+            raise RuntimeError(
+                'LocalFile backend needs to be initialized with a local'
+                ' path containing .vmn dir in it'
+            )
+
+    def __del__(self):
+        pass
+
+
+class GitBackend(VMNBackend):
+    def __init__(self, repo_path):
+        VMNBackend.__init__(self, "git")
 
         self._be = git.Repo(repo_path, search_parent_directories=True)
         self.add_git_user_cfg_if_missing()
         self._origin = self._be.remote(name="origin")
-
-        if revert:
-            self._be.head.reset(working_tree=True)
-        if pull:
-            self.pull()
 
         self._be.git.fetch("--tags")
 
@@ -456,7 +465,7 @@ class GitBackend(VersionControlBackend):
         else:
             regex = VMN_TAG_REGEX
 
-        tag_formated_app_name = VersionControlBackend.get_tag_formatted_app_name(
+        tag_formated_app_name = VMNBackend.get_tag_formatted_app_name(
             app_name
         )
         app_tags = self.tags(filter=(f"{tag_formated_app_name}_*"))
@@ -532,7 +541,7 @@ class GitBackend(VersionControlBackend):
 
             found = True
 
-            tagd = VersionControlBackend.get_tag_properties(tag)
+            tagd = VMNBackend.get_tag_properties(tag)
             tagd.update({"tag": tag})
             tagd["message"] = self._be.tag(f"refs/tags/{tag}").object.message
 
@@ -610,8 +619,7 @@ def get_versions_repo_path(root_path):
     return versions_repo_path
 
 
-def get_client(path, revert=False, pull=False):
-    be_type = None
+def get_client(path, be_type=None):
     try:
         client = git.Repo(path, search_parent_directories=True)
         client.close()
@@ -623,6 +631,6 @@ def get_client(path, revert=False, pull=False):
 
     be = None
     if be_type == "git":
-        be = GitBackend(path, revert, pull)
+        be = GitBackend(path)
 
     return be, None
