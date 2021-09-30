@@ -95,6 +95,18 @@ class VMNBackend(object):
     def type(self):
         return self._type
 
+    def last_user_changeset(self, name):
+        return None
+
+    def remote(self):
+        return None
+
+    def root(self):
+        return None
+
+    def get_vmn_version_info(self, app_name, root=False):
+        return {}
+
     @staticmethod
     def get_tag_formatted_app_name(
         app_name, version=None, prerelease=None, prerelease_count=None
@@ -206,7 +218,15 @@ class LocalFileBackend(VMNBackend):
                 ' path containing .vmn dir in it'
             )
 
+        self.repo_path = repo_path
+
     def __del__(self):
+        pass
+
+    def root(self):
+        return self.repo_path
+
+    def get_vmn_version_info(self, app_name, root=False):
         pass
 
 
@@ -400,10 +420,13 @@ class GitBackend(VMNBackend):
 
         self._be.git.checkout(rev)
 
-    def last_user_changeset(self):
+    def last_user_changeset(self, name):
         init_hex = None
         for p in self._be.iter_commits():
             if p.author.name == VMN_USER_NAME:
+                if f"{name}: Stamped initial version" in p.message:
+                    return p.hexsha
+
                 if p.message.startswith(INIT_COMMIT_MESSAGE):
                     init_hex = p.hexsha
 
@@ -608,25 +631,24 @@ class HostState(object):
         return actual_deps_state
 
 
-def get_versions_repo_path(root_path):
-    versions_repo_path = os.getenv("VER_STAMP_VERSIONS_PATH", None)
-    if versions_repo_path is not None:
-        versions_repo_path = os.path.abspath(versions_repo_path)
-    else:
-        versions_repo_path = os.path.abspath(f"{root_path}/.vmn/versions")
-        Path(versions_repo_path).mkdir(parents=True, exist_ok=True)
+def get_client(path, from_file=False):
+    if from_file:
+        try:
+            be = LocalFileBackend(path)
+            return be, None
+        except RuntimeError:
+            err = f"path: {path} doesn't have .vmn dir so it cannot be " \
+                   f"used as local file backend"
+            return None, err
 
-    return versions_repo_path
-
-
-def get_client(path, be_type=None):
+    be_type = None
     try:
         client = git.Repo(path, search_parent_directories=True)
         client.close()
 
         be_type = "git"
     except git.exc.InvalidGitRepositoryError:
-        err = f"repository path: {path} is not a functional git " "or repository."
+        err = f"repository path: {path} is not a functional git or repository.\n"
         return None, err
 
     be = None
