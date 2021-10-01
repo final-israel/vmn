@@ -3,7 +3,7 @@ import sys
 import os
 import git
 import logging
-from pathlib import Path
+import glob
 import re
 import time
 
@@ -207,6 +207,14 @@ class VMNBackend(object):
 
         return formatted_version
 
+    @staticmethod
+    def get_root_app_name_from_name(name):
+        root_app_name = name.split("/")
+        if len(root_app_name) == 1:
+            return None
+
+        return "/".join(root_app_name[:-1])
+
 
 class LocalFileBackend(VMNBackend):
     def __init__(self, repo_path):
@@ -227,7 +235,54 @@ class LocalFileBackend(VMNBackend):
         return self.repo_path
 
     def get_vmn_version_info(self, app_name, root=False):
-        pass
+        if root:
+            dir_path = os.path.join(
+                self.repo_path,
+                '.vmn',
+                app_name,
+                "root_verinfo",
+            )
+            list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
+            latest_file = max(list_of_files, key=os.path.getctime)
+            with open(latest_file, "r") as f:
+                return yaml.safe_load(f)
+
+        data = None
+        root_app_name = \
+            VMNBackend.get_root_app_name_from_name(app_name)
+        if root_app_name is not None:
+            dir_path = os.path.join(
+                self.repo_path,
+                '.vmn',
+                root_app_name,
+                "root_verinfo",
+            )
+            list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
+            latest_file = max(list_of_files, key=os.path.getctime)
+            with open(latest_file, "r") as f:
+                data = yaml.safe_load(f)
+
+        dir_path = os.path.join(
+            self.repo_path,
+            ".vmn",
+            app_name,
+            "verinfo",
+        )
+        list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
+        if not list_of_files:
+            LOGGER.error("Failed to ")
+            return None
+
+        latest_file = max(list_of_files, key=os.path.getctime)
+
+        with open(latest_file, "r") as f:
+            tmp = yaml.safe_load(f)
+            if data is None:
+                data = tmp
+            else:
+                data.update(tmp)
+
+        return data
 
 
 class GitBackend(VMNBackend):
@@ -491,13 +546,14 @@ class GitBackend(VMNBackend):
         tag_formated_app_name = VMNBackend.get_tag_formatted_app_name(
             app_name
         )
+
         app_tags = self.tags(filter=(f"{tag_formated_app_name}_*"))
         cleaned_app_tag = None
         for tag in app_tags:
             match = re.search(regex, tag)
             if match is None:
                 LOGGER.error(f"Tag {tag} doesn't comply to vmn version format")
-                raise RuntimeError()
+                break
 
             gdict = match.groupdict()
 
@@ -612,7 +668,13 @@ class HostState(object):
 
     @staticmethod
     def get_actual_deps_state(paths, root):
-        actual_deps_state = {}
+        actual_deps_state = {
+            '.':{
+                "hash": None,
+                "vcs_type": None,
+                "remote": None,
+            }
+        }
         for path, lst in paths.items():
             repos = [name for name in lst if os.path.isdir(os.path.join(path, name))]
 

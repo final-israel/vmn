@@ -821,7 +821,7 @@ class VersionControlStamper(IVersionsStamper):
                 version_files.extend(tmp)
 
             if self._create_verinfo_files:
-                dir_path = os.path.join(self._app_dir_path, "root_verinfo")
+                dir_path = os.path.join(self._root_app_dir_path, "root_verinfo")
                 Path(dir_path).mkdir(parents=True, exist_ok=True)
                 path = os.path.join(dir_path, f"{root_app_version}.yml")
                 with open(path, "w") as f:
@@ -972,7 +972,7 @@ def handle_stamp(vmn_ctx):
     except:
         return 1
 
-    if "matched_version_info" in status and status["matched_version_info"] is not None:
+    if status["matched_version_info"] is not None:
         # Good we have found an existing version matching
         # the actual_deps_state
         version = vmn_ctx.vcs.get_be_formatted_version(
@@ -1405,57 +1405,41 @@ def _stamp_version(
 
 
 def show(vcs, params, verstr=None):
+    dirty_states = None
+    ver_info = None
     if params["from_file"]:
         if verstr is None:
-            LOGGER.error(
-                "When requesting show from file - a version " "must be specified"
-            )
-
-            raise RuntimeError()
-
-        if params["root"]:
-            dir_path = os.path.join(vcs._root_app_dir_path, "root_verinfo")
-            path = os.path.join(dir_path, f"{verstr}.yml")
-            with open(path, "r") as f:
-                data = yaml.safe_load(f)
-                data = data["stamping"]["root_app"]
-                print(yaml.dump(data))
-
-            return 0
-
-        dir_path = os.path.join(vcs._app_dir_path, "verinfo")
-        path = os.path.join(dir_path, f"{verstr}.yml")
-        with open(path, "r") as f:
-            data = yaml.safe_load(f)
-            data = data["stamping"]["app"]
-            data[
-                "version"
-            ] = stamp_utils.VMNBackend.get_utemplate_formatted_version(
-                data["_version"], vcs.template, vcs._hide_zero_hotfix
-            )
-            print(yaml.dump(data))
-
-        return 0
-
-    expected_status = {
-        "repos_exist_locally",
-        "repo_tracked",
-        "app_tracked",
-    }
-    optional_status = {
-        "detached",
-        "pending",
-        "outgoing",
-        "modified",
-        "dirty_deps",
-    }
-    tag_name, ver_info, status = _retrieve_version_info(
-        params, vcs, verstr, expected_status, optional_status
-    )
-
-    if ver_info is None:
-        LOGGER.info("No such app: {0}".format(params["name"]))
-        raise RuntimeError()
+            ver_info = vcs.ver_info_from_repo
+        else:
+            if params["root"]:
+                dir_path = os.path.join(vcs._root_app_dir_path, "root_verinfo")
+                path = os.path.join(dir_path, f"{verstr}.yml")
+                with open(path, "r") as f:
+                    ver_info = yaml.safe_load(f)
+            else:
+                dir_path = os.path.join(vcs._app_dir_path, "verinfo")
+                path = os.path.join(dir_path, f"{verstr}.yml")
+                with open(path, "r") as f:
+                    ver_info = yaml.safe_load(f)
+    else:
+        expected_status = {
+            "repos_exist_locally",
+            "repo_tracked",
+            "app_tracked",
+        }
+        optional_status = {
+            "detached",
+            "pending",
+            "outgoing",
+            "modified",
+            "dirty_deps",
+        }
+        tag_name, ver_info, status = _retrieve_version_info(
+            params, vcs, verstr, expected_status, optional_status
+        )
+        if ver_info is not None:
+            dirty_states = \
+                ((optional_status & status["state"]) | {"detached"}) - {"detached"}
 
     if ver_info is None:
         LOGGER.info(
@@ -1466,8 +1450,6 @@ def show(vcs, params, verstr=None):
         )
 
         raise RuntimeError()
-
-    dirty_states = ((optional_status & status["state"]) | {"detached"}) - {"detached"}
 
     # TODO: refactor
     if params["root"]:
@@ -1482,6 +1464,7 @@ def show(vcs, params, verstr=None):
             raise RuntimeError()
 
         out = None
+
         if params.get("verbose"):
             out = yaml.dump(data)
         else:
@@ -1802,11 +1785,9 @@ def build_world(name, working_dir, root_context, from_file):
     if root_context:
         root_app_name = name
     else:
-        root_app_name = params["name"].split("/")
-        if len(root_app_name) == 1:
-            root_app_name = None
-        else:
-            root_app_name = "/".join(root_app_name[:-1])
+        root_app_name = stamp_utils.VMNBackend.get_root_app_name_from_name(
+            params["name"]
+        )
 
     params["root_app_dir_path"] = app_dir_path
     root_app_conf_path = None
