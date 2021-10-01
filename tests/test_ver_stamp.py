@@ -377,6 +377,85 @@ def test_show_from_file(app_layout, capfd):
     assert show_minimal_res == show_file
 
 
+def test_show_from_file_conf_changged(app_layout, capfd):
+    _init_vmn_in_repo()
+    _, params = _init_app(app_layout.app_name)
+    capfd.readouterr()
+
+    conf = {
+        "template": "[{major}][.{minor}][.{patch}]",
+        "create_verinfo_files": True,
+        "deps": {
+            "../": {
+                "test_repo": {
+                    "vcs_type": app_layout.be_type,
+                    "remote": app_layout._app_backend.be.remote(),
+                }
+            }
+        },
+        "extra_info": False,
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    capfd.readouterr()
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+    out, err = capfd.readouterr()
+    assert "0.0.1\n" == out
+
+    err = _show(app_layout.app_name, from_file=True)
+    assert err == 0
+    out, err = capfd.readouterr()
+    assert "0.0.1\n" == out
+
+    conf = {
+        "template": "[{major}][.{minor}][.{patch}]",
+        "deps": {
+            "../": {
+                "test_repo": {
+                    "vcs_type": app_layout.be_type,
+                    "remote": app_layout._app_backend.be.remote(),
+                }
+            }
+        },
+        "extra_info": False,
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # read to clear stderr and out
+    out, err = capfd.readouterr()
+    assert not err
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert "0.0.2\n" == out
+
+    err = _show(app_layout.app_name, from_file=True, raw=True)
+    assert err == 0
+    out, err = capfd.readouterr()
+    assert "0.0.1\n" == out
+
+    err = _show(
+        app_layout.app_name,
+        from_file=True,
+        raw=True,
+        version="0.0.2"
+    )
+    assert err == 1
+    out, err = capfd.readouterr()
+    assert f"[INFO] Version information was not found for {app_layout.app_name}.\n" == out
+
+
 def test_multi_repo_dependency(app_layout, capfd):
     _init_vmn_in_repo()
     _init_app(app_layout.app_name)

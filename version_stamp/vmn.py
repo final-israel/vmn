@@ -1410,13 +1410,15 @@ def show(vcs, params, verstr=None):
             if params["root"]:
                 dir_path = os.path.join(vcs._root_app_dir_path, "root_verinfo")
                 path = os.path.join(dir_path, f"{verstr}.yml")
-                with open(path, "r") as f:
-                    ver_info = yaml.safe_load(f)
             else:
                 dir_path = os.path.join(vcs._app_dir_path, "verinfo")
                 path = os.path.join(dir_path, f"{verstr}.yml")
+
+            try:
                 with open(path, "r") as f:
                     ver_info = yaml.safe_load(f)
+            except:
+                ver_info = None
     else:
         expected_status = {
             "repos_exist_locally",
