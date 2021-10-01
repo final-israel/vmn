@@ -445,15 +445,12 @@ def test_show_from_file_conf_changged(app_layout, capfd):
     out, err = capfd.readouterr()
     assert "0.0.1\n" == out
 
-    err = _show(
-        app_layout.app_name,
-        from_file=True,
-        raw=True,
-        version="0.0.2"
-    )
+    err = _show(app_layout.app_name, from_file=True, raw=True, version="0.0.2")
     assert err == 1
     out, err = capfd.readouterr()
-    assert f"[INFO] Version information was not found for {app_layout.app_name}.\n" == out
+    assert (
+        f"[INFO] Version information was not found for {app_layout.app_name}.\n" == out
+    )
 
 
 def test_multi_repo_dependency(app_layout, capfd):
