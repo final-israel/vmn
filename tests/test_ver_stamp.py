@@ -210,10 +210,12 @@ def test_basic_show(app_layout, capfd):
 def test_show_from_file(app_layout, capfd):
     _init_vmn_in_repo()
     _, params = _init_app(app_layout.app_name)
+    capfd.readouterr()
 
     err = _show(app_layout.app_name, verbose=True, from_file=True)
     assert err == 1
     out, err = capfd.readouterr()
+    assert out == f"[INFO] Version information was not found for {app_layout.app_name}.\n"
 
     conf = {
         "template": "[{major}][.{minor}][.{patch}]",

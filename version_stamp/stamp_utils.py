@@ -247,21 +247,6 @@ class LocalFileBackend(VMNBackend):
             with open(latest_file, "r") as f:
                 return yaml.safe_load(f)
 
-        data = None
-        root_app_name = \
-            VMNBackend.get_root_app_name_from_name(app_name)
-        if root_app_name is not None:
-            dir_path = os.path.join(
-                self.repo_path,
-                '.vmn',
-                root_app_name,
-                "root_verinfo",
-            )
-            list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
-            latest_file = max(list_of_files, key=os.path.getctime)
-            with open(latest_file, "r") as f:
-                data = yaml.safe_load(f)
-
         dir_path = os.path.join(
             self.repo_path,
             ".vmn",
@@ -270,19 +255,12 @@ class LocalFileBackend(VMNBackend):
         )
         list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
         if not list_of_files:
-            LOGGER.error("Failed to ")
             return None
 
         latest_file = max(list_of_files, key=os.path.getctime)
 
         with open(latest_file, "r") as f:
-            tmp = yaml.safe_load(f)
-            if data is None:
-                data = tmp
-            else:
-                data.update(tmp)
-
-        return data
+            return yaml.safe_load(f)
 
 
 class GitBackend(VMNBackend):
