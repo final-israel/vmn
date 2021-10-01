@@ -243,6 +243,9 @@ class LocalFileBackend(VMNBackend):
                 "root_verinfo",
             )
             list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
+            if not list_of_files:
+                return None
+
             latest_file = max(list_of_files, key=os.path.getctime)
             with open(latest_file, "r") as f:
                 return yaml.safe_load(f)
