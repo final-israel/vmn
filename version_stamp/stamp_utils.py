@@ -220,10 +220,10 @@ class LocalFileBackend(VMNBackend):
     def __init__(self, repo_path):
         VMNBackend.__init__(self, "local_file")
 
-        if not os.path.isdir(os.path.join(repo_path, '.vmn')):
+        if not os.path.isdir(os.path.join(repo_path, ".vmn")):
             raise RuntimeError(
-                'LocalFile backend needs to be initialized with a local'
-                ' path containing .vmn dir in it'
+                "LocalFile backend needs to be initialized with a local"
+                " path containing .vmn dir in it"
             )
 
         self.repo_path = repo_path
@@ -238,7 +238,7 @@ class LocalFileBackend(VMNBackend):
         if root:
             dir_path = os.path.join(
                 self.repo_path,
-                '.vmn',
+                ".vmn",
                 app_name,
                 "root_verinfo",
             )
@@ -521,9 +521,7 @@ class GitBackend(VMNBackend):
         else:
             regex = VMN_TAG_REGEX
 
-        tag_formated_app_name = VMNBackend.get_tag_formatted_app_name(
-            app_name
-        )
+        tag_formated_app_name = VMNBackend.get_tag_formatted_app_name(app_name)
 
         app_tags = self.tags(filter=(f"{tag_formated_app_name}_*"))
         cleaned_app_tag = None
@@ -647,7 +645,7 @@ class HostState(object):
     @staticmethod
     def get_actual_deps_state(paths, root):
         actual_deps_state = {
-            '.':{
+            ".": {
                 "hash": None,
                 "vcs_type": None,
                 "remote": None,
@@ -677,8 +675,10 @@ def get_client(path, from_file=False):
             be = LocalFileBackend(path)
             return be, None
         except RuntimeError:
-            err = f"path: {path} doesn't have .vmn dir so it cannot be " \
-                   f"used as local file backend"
+            err = (
+                f"path: {path} doesn't have .vmn dir so it cannot be "
+                f"used as local file backend"
+            )
             return None, err
 
     be_type = None

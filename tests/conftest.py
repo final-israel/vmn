@@ -185,8 +185,13 @@ class FSAppLayoutFixture(object):
         self._app_backend.remove_app_version_file(app_version_file_path)
 
     def write_conf(
-        self, app_conf_path, template, deps, extra_info,
-            version_backends={}, create_verinfo_files=False,
+        self,
+        app_conf_path,
+        template,
+        deps,
+        extra_info,
+        version_backends={},
+        create_verinfo_files=False,
     ):
         with open(app_conf_path, "r+") as f:
             data = yaml.safe_load(f)

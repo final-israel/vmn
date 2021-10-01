@@ -64,16 +64,12 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
         return err, ver_info, vmn_ctx.params
 
 
-def _show(app_name, version=None, verbose=None, raw=None,
-          root=False, from_file=False):
+def _show(app_name, version=None, verbose=None, raw=None, root=False, from_file=False):
     args_list = ["show"]
     if verbose is not None:
         args_list.append("--verbose")
     if version is not None:
-        args_list.extend(
-            ["--version",
-             f"{version}"]
-        )
+        args_list.extend(["--version", f"{version}"])
     if raw is not None:
         args_list.append("--raw")
     if root:
@@ -215,7 +211,9 @@ def test_show_from_file(app_layout, capfd):
     err = _show(app_layout.app_name, verbose=True, from_file=True)
     assert err == 1
     out, err = capfd.readouterr()
-    assert out == f"[INFO] Version information was not found for {app_layout.app_name}.\n"
+    assert (
+        out == f"[INFO] Version information was not found for {app_layout.app_name}.\n"
+    )
 
     conf = {
         "template": "[{major}][.{minor}][.{patch}]",
@@ -257,9 +255,7 @@ def test_show_from_file(app_layout, capfd):
     out, err = capfd.readouterr()
     show_file_res_empty_ver = yaml.safe_load(out)
 
-    err = _show(
-        app_layout.app_name, version="0.0.1", verbose=True, from_file=True
-    )
+    err = _show(app_layout.app_name, version="0.0.1", verbose=True, from_file=True)
     assert err == 0
 
     out, err = capfd.readouterr()
@@ -303,9 +299,7 @@ def test_show_from_file(app_layout, capfd):
     out, err = capfd.readouterr()
     show_res = yaml.safe_load(out)
 
-    err = _show(
-        app_name, version="0.0.1", verbose=True, from_file=True
-    )
+    err = _show(app_name, version="0.0.1", verbose=True, from_file=True)
     assert err == 0
 
     out, err = capfd.readouterr()
@@ -319,14 +313,15 @@ def test_show_from_file(app_layout, capfd):
     assert err == 1
     out, err = capfd.readouterr()
 
-    err = _show('root_app', verbose=True, root=True)
+    err = _show("root_app", verbose=True, root=True)
     assert err == 0
 
     out, err = capfd.readouterr()
     show_root_res = yaml.safe_load(out)
 
     err = _show(
-        'root_app', version="1",
+        "root_app",
+        version="1",
         from_file=True,
         verbose=True,
         root=True,
@@ -343,12 +338,11 @@ def test_show_from_file(app_layout, capfd):
     out, err = capfd.readouterr()
     show_minimal_res = yaml.safe_load(out)
 
-    shutil.rmtree(
-        os.path.join(app_layout.repo_path, ".git")
-    )
+    shutil.rmtree(os.path.join(app_layout.repo_path, ".git"))
 
     err = _show(
-        'root_app', version="1",
+        "root_app",
+        version="1",
         from_file=True,
         verbose=True,
         root=True,
@@ -360,7 +354,8 @@ def test_show_from_file(app_layout, capfd):
     assert show_file_res == show_root_res
 
     err = _show(
-        app_name, version="0.0.1",
+        app_name,
+        version="0.0.1",
         verbose=True,
         from_file=True,
     )
@@ -727,30 +722,24 @@ def test_rc_goto(app_layout, capfd):
 
 
 def test_version_template():
-    formated_version = (
-        stamp_utils.VMNBackend.get_utemplate_formatted_version(
-            "2.0.9",
-            vmn.IVersionsStamper.parse_template("[{major}][-{prerelease}]"),
-            True,
-        )
+    formated_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
+        "2.0.9",
+        vmn.IVersionsStamper.parse_template("[{major}][-{prerelease}]"),
+        True,
     )
 
     assert formated_version == "2"
 
-    formated_version = (
-        stamp_utils.VMNBackend.get_utemplate_formatted_version(
-            "2.0.9.0", vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"), True
-        )
+    formated_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
+        "2.0.9.0", vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"), True
     )
 
     assert formated_version == "2"
 
-    formated_version = (
-        stamp_utils.VMNBackend.get_utemplate_formatted_version(
-            "2.0.9.0",
-            vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"),
-            False,
-        )
+    formated_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
+        "2.0.9.0",
+        vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"),
+        False,
     )
 
     assert formated_version == "2-0"

@@ -41,13 +41,13 @@ class VMNContextMAnagerManager(object):
         if "root" in self.args:
             root = self.args.root
         from_file = False
-        if 'from_file' in self.args and self.args.from_file:
+        if "from_file" in self.args and self.args.from_file:
             from_file = True
         initial_params = {
             "root": root,
             "cwd": cwd,
             "name": None,
-            'from_file': from_file,
+            "from_file": from_file,
         }
 
         if "name" in self.args and self.args.name:
@@ -473,13 +473,11 @@ class VersionControlStamper(IVersionsStamper):
         return verstr
 
     def find_matching_version(self, version, prerelease, prerelease_count):
-        tag_formatted_app_name = (
-            stamp_utils.VMNBackend.get_tag_formatted_app_name(
-                self._name,
-                version,
-                prerelease,
-                prerelease_count,
-            )
+        tag_formatted_app_name = stamp_utils.VMNBackend.get_tag_formatted_app_name(
+            self._name,
+            version,
+            prerelease,
+            prerelease_count,
         )
 
         # Try to find any version of the application matching the
@@ -836,9 +834,7 @@ class VersionControlStamper(IVersionsStamper):
         else:
             commit_msg = f"{self._name}: Stamped version {verstr}\n\n"
 
-        self.current_version_info["stamping"][
-            "msg"
-        ] = commit_msg
+        self.current_version_info["stamping"]["msg"] = commit_msg
         self.backend.commit(
             message=self.current_version_info["stamping"]["msg"],
             user="vmn",
@@ -1438,8 +1434,9 @@ def show(vcs, params, verstr=None):
             params, vcs, verstr, expected_status, optional_status
         )
         if ver_info is not None:
-            dirty_states = \
-                ((optional_status & status["state"]) | {"detached"}) - {"detached"}
+            dirty_states = ((optional_status & status["state"]) | {"detached"}) - {
+                "detached"
+            }
 
     if ver_info is None:
         LOGGER.info(
