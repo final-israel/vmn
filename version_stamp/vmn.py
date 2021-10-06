@@ -116,7 +116,23 @@ class IVersionsStamper(object):
                 },
             }
 
-        if not conf["from_file"]:
+        if self.name is None:
+            self.tracked = False
+            return
+
+        self.last_user_changeset = self.backend.last_user_changeset(self.name)
+
+        if conf["from_file"]:
+            self._raw_configured_deps = {
+                os.path.join("../"): {
+                    os.path.basename(self.root_path):
+                        {
+                            "remote": None,
+                            "vcs_type": None
+                        }
+                }
+            }
+        else:
             self._raw_configured_deps = {
                 os.path.join("../"): {
                     os.path.basename(self.root_path):
@@ -126,6 +142,7 @@ class IVersionsStamper(object):
                         }
                 }
             }
+
             deps = {}
             for rel_path, dep in self._raw_configured_deps.items():
                 deps[os.path.join(self.root_path, rel_path)] = tuple(dep.keys())
@@ -134,12 +151,7 @@ class IVersionsStamper(object):
                 HostState.get_actual_deps_state(deps, self.root_path)
 
             if self.name is not None:
-                self.actual_deps_state["."]["hash"] = \
-                    self.backend.last_user_changeset(self.name)
-        
-        if self.name is None:
-            self.tracked = False
-            return
+                self.actual_deps_state["."]["hash"] = self.last_user_changeset
 
         self.initialize_paths(conf)
         self.update_attrs_from_app_conf_file(conf)
@@ -195,6 +207,7 @@ class IVersionsStamper(object):
                     self.actual_deps_state.update(
                         HostState.get_actual_deps_state(deps, self.root_path)
                     )
+                    self.actual_deps_state["."]["hash"] = self.last_user_changeset
 
     def initialize_paths(self, conf):
         self._app_dir_path = os.path.join(
@@ -405,7 +418,7 @@ class IVersionsStamper(object):
                 continue
 
     def _write_version_to_cargo(self, verstr):
-        backend_conf = self._version_backends["cargo"]
+        backend_conf = self.version_backends["cargo"]
         file_path = os.path.join(self.root_path, backend_conf["path"])
         try:
             with open(file_path, "r") as f:
