@@ -34,7 +34,7 @@ def _init_app(app_name, starting_version="0.0.0"):
 
         ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_name)
 
-        return ver_info, vmn_ctx.params
+        return ver_info, (vmn_ctx.params | vmn_ctx.vcs.__dict__)
 
 
 def _release_app(app_name, version):
@@ -44,7 +44,7 @@ def _release_app(app_name, version):
 
         ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_name)
 
-        return ver_info, vmn_ctx.params
+        return ver_info, (vmn_ctx.params| vmn_ctx.vcs.__dict__)
 
 
 def _stamp_app(app_name, release_mode=None, prerelease=None):
@@ -61,7 +61,7 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
         err = vmn.handle_stamp(vmn_ctx)
         ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_name)
 
-        return err, ver_info, vmn_ctx.params
+        return err, ver_info, (vmn_ctx.params | vmn_ctx.vcs.__dict__)
 
 
 def _show(app_name, version=None, verbose=None, raw=None, root=False, from_file=False, ignore_dirty=False):
@@ -374,6 +374,7 @@ def test_show_from_file(app_layout, capfd):
     out, err = capfd.readouterr()
     show_minimal_res = yaml.safe_load(out)
 
+    del app_layout._app_backend
     shutil.rmtree(os.path.join(app_layout.repo_path, ".git"))
 
     err = _show(
