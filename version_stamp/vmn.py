@@ -1145,6 +1145,8 @@ def handle_show(vmn_ctx):
     else:
         vmn_ctx.params["raw"] = vmn_ctx.args.raw
 
+    vmn_ctx.params["ignore_dirty"] = vmn_ctx.args.ignore_dirty
+
     vmn_ctx.params["verbose"] = vmn_ctx.args.verbose
     if vmn_ctx.args.template is not None:
         vmn_ctx.vcs.set_template(vmn_ctx.args.template)
@@ -1507,6 +1509,9 @@ def show(vcs, params, verstr=None):
                 "detached"
             }
 
+            if params["ignore_dirty"]:
+                dirty_states = None
+
     if ver_info is None:
         LOGGER.info(
             "Version information was not found "
@@ -1813,7 +1818,91 @@ def build_world(name, working_dir, root_context, from_file):
 
     root_path = os.path.join(be.root())
     params["root_path"] = root_path
+
     params["repo_name"] = '.'
+
+    params["raw_configured_deps"] = {
+        os.path.join("../"): {
+            os.path.basename(root_path): {"remote": be.remote(), "vcs_type": be.type()}
+        }
+    }
+    deps = {}
+    for rel_path, dep in params["raw_configured_deps"].items():
+        deps[os.path.join(root_path, rel_path)] = tuple(dep.keys())
+
+    actual_deps_state = HostState.get_actual_deps_state(deps, root_path)
+    params["actual_deps_state"] = actual_deps_state
+
+    params["template"] = stamp_utils.VMN_DEFAULT_TEMPLATE
+
+    params["extra_info"] = False
+    params["create_verinfo_files"] = False
+
+    params["hide_zero_hotfix"] = True
+    params["version_backends"] = {}
+
+    if name is None:
+        return params
+
+    last_user_hex = be.last_user_changeset(name)
+    actual_deps_state["."]["hash"] = last_user_hex
+
+    app_dir_path = os.path.join(
+        root_path,
+        ".vmn",
+        params["name"].replace("/", os.sep),
+    )
+    params["app_dir_path"] = app_dir_path
+
+    params["version_file_path"] = os.path.join(app_dir_path, VER_FILE_NAME)
+
+    app_conf_path = os.path.join(app_dir_path, "conf.yml")
+    params["app_conf_path"] = app_conf_path
+
+    if root_context:
+        root_app_name = name
+    else:
+        root_app_name = stamp_utils.VMNBackend.get_root_app_name_from_name(
+            params["name"]
+        )
+
+    params["root_app_dir_path"] = app_dir_path
+    root_app_conf_path = None
+    if root_app_name is not None:
+        root_app_dir_path = os.path.join(
+            root_path,
+            ".vmn",
+            root_app_name,
+        )
+
+        params["root_app_dir_path"] = root_app_dir_path
+        root_app_conf_path = os.path.join(root_app_dir_path, "root_conf.yml")
+
+    params["root_app_conf_path"] = root_app_conf_path
+    params["root_app_name"] = root_app_name
+
+    if not os.path.isfile(app_conf_path):
+        return params
+
+    with open(app_conf_path, "r") as f:
+        data = yaml.safe_load(f)
+        params["template"] = data["conf"]["template"]
+        params["extra_info"] = data["conf"]["extra_info"]
+        params["raw_configured_deps"] = data["conf"]["deps"]
+        if "hide_zero_hotfix" in data["conf"]:
+            params["hide_zero_hotfix"] = data["conf"]["hide_zero_hotfix"]
+        if "version_backends" in data["conf"]:
+            params["version_backends"] = data["conf"]["version_backends"]
+        if "create_verinfo_files" in data["conf"]:
+            params["create_verinfo_files"] = data["conf"]["create_verinfo_files"]
+
+        deps = {}
+        for rel_path, dep in params["raw_configured_deps"].items():
+            deps[os.path.join(root_path, rel_path)] = tuple(dep.keys())
+
+        actual_deps_state.update(HostState.get_actual_deps_state(deps, root_path))
+        actual_deps_state["."]["hash"] = last_user_hex
+        params["actual_deps_state"] = actual_deps_state
 
     return params
 
@@ -1907,6 +1996,8 @@ def parse_user_commands(command_line):
     pshow.set_defaults(raw=False)
     pshow.add_argument("--from-file", dest="from_file", action="store_true")
     pshow.set_defaults(from_file=False)
+    pshow.add_argument("--ignore-dirty", dest="ignore_dirty", action="store_true")
+    pshow.set_defaults(ignore_dirty=False)
     pstamp = subprasers.add_parser("stamp", help="stamp version")
     pstamp.add_argument(
         "-r",

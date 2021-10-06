@@ -64,7 +64,7 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
         return err, ver_info, vmn_ctx.params
 
 
-def _show(app_name, version=None, verbose=None, raw=None, root=False, from_file=False):
+def _show(app_name, version=None, verbose=None, raw=None, root=False, from_file=False, ignore_dirty=False):
     args_list = ["show"]
     if verbose is not None:
         args_list.append("--verbose")
@@ -76,6 +76,8 @@ def _show(app_name, version=None, verbose=None, raw=None, root=False, from_file=
         args_list.append("--root")
     if from_file:
         args_list.append("--from-file")
+    if ignore_dirty:
+        args_list.append("--ignore-dirty")
 
     args_list.append(app_name)
 
@@ -94,7 +96,7 @@ def test_basic_stamp(app_layout):
         assert err == 0
         assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
 
-    new_name = "{0}_{1}".format(app_layout.app_name, "2")
+    new_name = f"{app_layout.app_name}_2"
     _init_app(new_name, "1.0.0")
 
     for i in range(2):
@@ -105,6 +107,27 @@ def test_basic_stamp(app_layout):
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
+
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "f1.file",
+        "msg1",
+    )
+
+    for i in range(2):
+        err, ver_info, _ = _stamp_app(new_name, "hotfix")
+        assert err == 0
+        assert ver_info["stamping"]["app"]["_version"] == "1.0.0.2"
+
+    for i in range(2):
+        err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+        assert err == 0
+        assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
+
+    for i in range(2):
+        err, ver_info, _ = _stamp_app(new_name, "hotfix")
+        assert err == 0
+        assert ver_info["stamping"]["app"]["_version"] == "1.0.0.2"
 
 
 def test_basic_show(app_layout, capfd):
@@ -146,6 +169,19 @@ def test_basic_show(app_layout, capfd):
         "msg1",
         commit=False,
     )
+
+    err = _show(app_layout.app_name)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert 'dirty' in out
+
+    err = _show(app_layout.app_name, ignore_dirty=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert '0.0.1\n' == out
+
     err = _show(app_layout.app_name, verbose=True)
     assert err == 0
 
