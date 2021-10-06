@@ -1813,7 +1813,7 @@ def build_world(name, working_dir, root_context, from_file):
 
     root_path = os.path.join(be.root())
     params["root_path"] = root_path
-    params["repo_name"] = os.path.basename(root_path)
+    params["repo_name"] = '.'
 
     return params
 
