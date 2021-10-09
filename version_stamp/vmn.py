@@ -104,11 +104,16 @@ class IVersionsStamper(object):
         self.root_path = conf["root_path"]
         self.repo_name = "."
         self.name = conf["name"]
+
+        # Configuration defaults
         self.template = stamp_utils.VMN_DEFAULT_TEMPLATE
         self.extra_info = False
         self.create_verinfo_files = False
         self.hide_zero_hotfix = True
         self.version_backends = {}
+        # This one will be filled with self dependency ('.') by default
+        self.raw_configured_deps = None
+
         self.should_publish = True
         self.current_version_info = {
             "vmn_info": {
@@ -119,7 +124,6 @@ class IVersionsStamper(object):
         }
 
         self.root_context = conf["root"]
-        self.raw_configured_deps = None
 
         if self.name is None:
             self.tracked = False
@@ -145,9 +149,12 @@ class IVersionsStamper(object):
         if os.path.isfile(self.app_conf_path):
             with open(self.app_conf_path, "r") as f:
                 data = yaml.safe_load(f)
-                self.template = data["conf"]["template"]
-                self.extra_info = data["conf"]["extra_info"]
-                self.raw_configured_deps = data["conf"]["deps"]
+                if "template" in data["conf"]:
+                    self.template = data["conf"]["template"]
+                if "extra_info" in data["conf"]:
+                    self.extra_info = data["conf"]["extra_info"]
+                if "deps" in data["conf"]:
+                    self.raw_configured_deps = data["conf"]["deps"]
                 if "hide_zero_hotfix" in data["conf"]:
                     self.hide_zero_hotfix = data["conf"]["hide_zero_hotfix"]
                 if "version_backends" in data["conf"]:
@@ -439,7 +446,7 @@ class IVersionsStamper(object):
             version, self.template, self.hide_zero_hotfix
         )
 
-    def create_config_files(self, params):
+    def create_config_files(self):
         # If there is no file - create it
         if not os.path.isfile(self.app_conf_path):
             pathlib.Path(os.path.dirname(self.app_conf_path)).mkdir(
@@ -451,7 +458,9 @@ class IVersionsStamper(object):
                     "template": self.template,
                     "deps": self.raw_configured_deps,
                     "extra_info": self.extra_info,
-                    "hide_zero_hotfix": True,
+                    "hide_zero_hotfix": self.hide_zero_hotfix,
+                    "create_verinfo_files": self.create_verinfo_files,
+                    "version_backends": self.version_backends,
                 }
             }
 
@@ -938,7 +947,7 @@ def handle_init_app(vmn_ctx):
         return err
 
     # TODO: validate version number is of type major.minor.patch[.hotfix]
-    err = _init_app(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
+    err = _init_app(vmn_ctx.vcs, vmn_ctx.args.version)
     if err:
         return 1
 
@@ -1304,14 +1313,14 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
     return status
 
 
-def _init_app(versions_be_ifc, params, starting_version):
+def _init_app(versions_be_ifc, starting_version):
     expected_status = {"repos_exist_locally", "repo_tracked", "modified"}
     try:
         status = _get_repo_status(versions_be_ifc, expected_status)
     except Exception as exc:
         return 1
 
-    versions_be_ifc.create_config_files(params)
+    versions_be_ifc.create_config_files()
     versions_be_ifc.write_version_to_file(
         version_number=starting_version, prerelease="release", prerelease_count={}
     )
