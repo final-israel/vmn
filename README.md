@@ -1,9 +1,8 @@
 <p align="center">
-  <img width="100" src="https://i.imgur.com/4gUaVKW.png">
+  <img width="80" src="https://i.imgur.com/4gUaVKW.png">
   <br>
-  <h1 align="center">Version MaNagment package - vmn</h1>
+<h1 align="center"><font color='blue'>V</font>ersion <font color='blue'>m</font>a<font color='blue'>n</font>agment package</h1>
 </p>
-
 
 
 A simple package for auto increasing version numbers of any application agnostic to language or architecture.
