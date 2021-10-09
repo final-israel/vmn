@@ -17,6 +17,7 @@ from packaging import version as pversion
 
 CUR_PATH = "{0}/".format(os.path.dirname(__file__))
 VER_FILE_NAME = "last_known_app_version.yml"
+INIT_FILENAME = "conf.yml"
 IGNORED_FILES = ["vmn.lock"]
 
 sys.path.append(CUR_PATH)
@@ -911,7 +912,7 @@ def handle_init(vmn_ctx):
 
     vmn_path = os.path.join(vmn_ctx.vcs.root_path, ".vmn")
     Path(vmn_path).mkdir(parents=True, exist_ok=True)
-    vmn_init_path = os.path.join(vmn_path, "vmn.init")
+    vmn_init_path = os.path.join(vmn_path, INIT_FILENAME)
     Path(vmn_init_path).touch()
     git_ignore_path = os.path.join(vmn_path, ".gitignore")
 
@@ -1180,8 +1181,12 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
         }
     )
 
-    path = os.path.join(versions_be_ifc.root_path, ".vmn", "vmn.init")
-    if not versions_be_ifc.backend.is_path_tracked(path):
+    path = os.path.join(versions_be_ifc.root_path, ".vmn", INIT_FILENAME)
+    # For compatability of early adapters of 0.4.0
+    old_path = os.path.join(versions_be_ifc.root_path, ".vmn", "vmn.init")
+    if not versions_be_ifc.backend.is_path_tracked(
+        path
+    ) and not versions_be_ifc.backend.is_path_tracked(old_path):
         # Backward compatability with vmn 0.3.9 code:
         file_path = backward_compatible_initialized_check(versions_be_ifc.root_path)
 
