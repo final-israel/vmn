@@ -5,19 +5,19 @@
 </p>
 A simple package for auto increasing version numbers of any application agnostic to language or architecture.
 
-`vmn` is fully compliant with `Semver` (https://semver.org) semantics
+`vmn` is compliant with `Semver` (https://semver.org) semantics
 
 ### Key features
 
 - [x] Stamping of versions of type: **`major`. `minor`.`patch`** , e.g.,` 1.6.0` [`Semver` compliant]
 - [x] Stamping of versions of type: `major`. `minor`.`patch`**-`prerelease`** , e.g.,` 1.6.0-rc23` [`Semver` compliant]
 - [x] Stamping of versions of type: `major`. `minor`.`patch`.**`hotfix`** , e.g.,` 1.6.7.4` [`Semver` extension]
-- [x] Bringing back the repository / repositories state to the state it was when the project was stamped (see `goto` section)
+- [x] Bringing back the repository / repositories state to the state they were when the project was stamped (see `goto` section)
 - [x] Stamping of micro-services like project topologies (see `Root apps` section)
 - [x] Stamping of a project depending on multiple git repositories (see `Configuration: deps` section)
 - [x] Version auto-embedding to supported backends (`npm`, `cargo`) during the `vmn stamp` phase (see `Version auto-embedding` section)
-- [ ] WIP: Stamping of versions of type: `major`. `minor`.`patch`[-`prerelease`]+**`buildmetadata`** , e.g.,` 1.6.0-rc23+build01.Info` [`Semver` compliant]
-- [ ] WIP: Addition of `releasenotes` for an existing version [`Semver` extension]
+- [ ] `WIP` Addition of `buildmetadata` for an existing version, e.g.,` 1.6.0-rc23+build01.Info` [`Semver` compliant]
+- [ ] `WIP` Addition of `releasenotes` for an existing version [`Semver` extension]
 
 ## Usage
 ### cd into your git repository
