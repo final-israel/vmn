@@ -3,6 +3,24 @@
   <br>
 <h1 align="center">Version managment package</h1>
 </p>
+
+**Contents**
+
+- [General Information](#general-information)
+- [Key features](#key-features)
+- [Installation Guide](#installation-guide)
+- [Usage](#usage)
+  - [Prerequisitions](#prerequisitions)
+  - [Start Stamping](#start-stamping)
+  - [Release Candidates](#release-candidates)
+  - [Show](#show)
+  - [Goto](#goto)
+- [Advanced Features](#advanced-features)
+  - [Root Apps](#root-apps)
+  - [Configuration](#configuration)
+
+
+## General Information
 A simple package for auto increasing version numbers of any application agnostic to language or architecture.
 
 `vmn` is compliant with `Semver` (https://semver.org) semantics
@@ -20,42 +38,40 @@ A simple package for auto increasing version numbers of any application agnostic
 - [ ] `WIP` Addition of `releasenotes` for an existing version [`Semver` extension]
 - [ ] `WIP` Support "root apps" that are located in different repositories
 
-## Installation
+## Installation Guide
 ```sh
 pip3 install vmn
 ```
 
 ## Usage
-### cd into your git repository
+### Prerequisitions
 ```sh
+# Change Directory Into Your Git Repository
 cd to/your/repository
-```
 
-### Init phase
-```sh
-## Needed only once per repository.
+# Needed Only Once Per Repository.
 vmn init
 ```
 
-### Start stamping
+### Start Stamping
 ```sh
-## Needed only once per app-name
-# will start from 0.0.0
-vmn init-app <app-name>
+# Needed Only Once Per App-Name
+# The Starting version Is 0.0.0
+vmn init-app <App-Name>
 
-# will stamp 0.0.1
+# To Increace The Version To Version 0.0.1
 vmn stamp -r patch <app-name>
 
-# example for starting from version 1.6.8
-vmn init-app -v 1.6.8 <app-name2>
+## Example For Starting App-Name2 From Version 1.6.8
+vmn init-app -v 1.6.8 <App-Name2>
 
-# will stamp 1.7.0
-vmn stamp -r minor <app-name2>
+# To Increace The Version To Version 1.7.0
+vmn stamp -r minor <App-Name2>
 ```
 ##### Note:
 `init-app` and `stamp` both support `--dry-run` flag
 
-### Release candidates
+### Release Candidates
 
 `vmn` supports `Semver`'s `prerelease` notion of version stamping, enabling you to release non-mature versions and only then release the final version.
 
@@ -107,8 +123,8 @@ and be embedded via a custom script to the application's code during its build p
 | ![alt text](https://user-images.githubusercontent.com/5350434/136626161-2a7bdc4a-5d42-4012-ae42-b460ddf7ea88.png) | Will embed Semver version string to your `package.json` file during the `vmn stamp` command |
 | ![alt text](https://user-images.githubusercontent.com/5350434/136626484-0a8e4890-42f1-4437-b306-28f190d095ee.png) | Will embed Semver version string to your `Cargo.toml` file during the `vmn stamp` command |
 
-## Advanced features
-### Root apps
+## Advanced Features
+### Root Apps
 
 `vmn` supports stamping of something called a "root app" which can be useful for managing version of multiple services that are logically located under the same solution. 
 
