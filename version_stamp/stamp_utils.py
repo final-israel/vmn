@@ -6,10 +6,9 @@ import logging
 import glob
 import re
 import time
-
 import yaml
-
 import configparser
+from logging.handlers import RotatingFileHandler
 
 INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 
@@ -72,24 +71,93 @@ VMN_USER_NAME = "vmn"
 LOGGER = None
 
 
-def init_stamp_logger(debug=False):
+def resolve_root_path():
+    cwd = os.getcwd()
+    if "VMN_WORKING_DIR" in os.environ:
+        cwd = os.environ["VMN_WORKING_DIR"]
+
+    root_path = os.path.realpath(os.path.expanduser(cwd))
+    """
+            ".git" is the default app's backend in this case. If other backends will be added, 
+            then it can be moved to the configuration file as a default_backend or similar. 
+        """
+    exist = os.path.exists(os.path.join(root_path, ".vmn")) or \
+            os.path.exists(os.path.join(root_path, ".git"))
+    while not exist:
+        try:
+            prev_path = root_path
+            root_path = os.path.realpath(os.path.join(root_path, ".."))
+            if prev_path == root_path:
+                raise RuntimeError()
+
+            exist = os.path.exists(os.path.join(root_path, ".vmn")) or \
+                    os.path.exists(os.path.join(root_path, ".git"))
+        except:
+            root_path = None
+            break
+    if root_path is None:
+        raise RuntimeError("Running from an unmanaged directory")
+
+    return root_path
+
+
+class LevelFilter(logging.Filter):
+    def __init__(self, low, high):
+        self._low = low
+        self._high = high
+        logging.Filter.__init__(self)
+
+    def filter(self, record):
+        if self._low <= record.levelno <= self._high:
+            return True
+        return False
+
+
+def init_stamp_logger(rotating_log_path, debug=False):
     global LOGGER
 
     LOGGER = logging.getLogger(VMN_USER_NAME)
-    for handler in LOGGER.handlers:
-        LOGGER.removeHandler(handler)
+    hlen = len(LOGGER.handlers)
+    for h in range(hlen):
+        LOGGER.handlers[0].close()
+        LOGGER.removeHandler(LOGGER.handlers[0])
+    flen = len(LOGGER.filters)
+    for f in range(flen):
+        LOGGER.removeFilter(LOGGER.filters[0])
 
+    LOGGER.setLevel(logging.DEBUG)
+
+    fmt = "[%(levelname)s] %(message)s"
+    formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
+
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setFormatter(formatter)
+
+    min_stdout_level = logging.INFO
     if debug:
-        LOGGER.setLevel(logging.DEBUG)
-    else:
-        LOGGER.setLevel(logging.INFO)
-    format = "[%(levelname)s] %(message)s"
+        min_stdout_level = logging.DEBUG
 
-    formatter = logging.Formatter(format, "%Y-%m-%d %H:%M:%S")
+    stdout_handler.addFilter(
+        LevelFilter(min_stdout_level, logging.INFO)
+    )
+    LOGGER.addHandler(stdout_handler)
 
-    cons_handler = logging.StreamHandler(sys.stdout)
-    cons_handler.setFormatter(formatter)
-    LOGGER.addHandler(cons_handler)
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler.setFormatter(formatter)
+    stderr_handler.setLevel(logging.WARNING)
+    LOGGER.addHandler(stderr_handler)
+
+    rotating_file_handler = RotatingFileHandler(
+        rotating_log_path, maxBytes=1024 * 10, backupCount=1,
+    )
+    rotating_file_handler.setLevel(logging.DEBUG)
+
+    bold_char = '\033[1m'
+    end_char = '\033[0m'
+    fmt = f"{bold_char}%(asctime)s - [%(levelname)s]{end_char} %(message)s"
+    formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
+    rotating_file_handler.setFormatter(formatter)
+    LOGGER.addHandler(rotating_file_handler)
 
     return LOGGER
 
@@ -105,7 +173,7 @@ class VMNBackend(object):
         return self._type
 
     def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         return {}
 
@@ -196,8 +264,8 @@ class VMNBackend(object):
                 continue
 
             if (
-                f"{octat}_template" in template
-                and template[f"{octat}_template"] is not None
+                    f"{octat}_template" in template
+                    and template[f"{octat}_template"] is not None
             ):
                 d = {octat: gdict[octat]}
                 formatted_version = (
@@ -220,7 +288,8 @@ class LocalFileBackend(VMNBackend):
     def __init__(self, repo_path):
         VMNBackend.__init__(self, "local_file")
 
-        if not os.path.isdir(os.path.join(repo_path, ".vmn")):
+        vmn_dir_path = os.path.join(repo_path, ".vmn")
+        if not os.path.isdir(vmn_dir_path):
             raise RuntimeError(
                 "LocalFile backend needs to be initialized with a local"
                 " path containing .vmn dir in it"
@@ -232,7 +301,7 @@ class LocalFileBackend(VMNBackend):
         pass
 
     def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root:
             dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
@@ -340,10 +409,12 @@ class GitBackend(VMNBackend):
 
     def tags(self, branch=None, filter=None):
         cmd = ["--sort", "committerdate"]
+        shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
 
         if branch is not None:
-            cmd.append("--merged")
-            cmd.append(branch)
+            if not shallow:
+                cmd.append("--merged")
+                cmd.append(branch)
 
         if filter is not None:
             cmd.append("--list")
@@ -356,37 +427,19 @@ class GitBackend(VMNBackend):
         if not tag_names:
             return tag_names
 
-        sorted_tags = []
+        tag_objects = []
         for tname in tag_names:
-            t = None
-            for tag in self._be.tags:
-                if tname != tag.name:
-                    continue
-
-                # yay, we found the object
-                t = tag
-                if t.commit.author.name != "vmn":
-                    continue
-
-                break
-
-            if t is None:
-                raise RuntimeError(
-                    f"Somehow did not find a tag object for tag: {tname}"
-                )
-
-            sorted_tags.append(t)
-
-        # The order of this list does not really matter. Can be anything really
-        sorted_tags.reverse()
+            o = self.get_tag_object_from_tag_name(tname)
+            tag_objects.append(o)
 
         tags_commit_order = []
         tags = {}
-        for t in sorted_tags:
+        for t in tag_objects:
             if t.commit.hexsha not in tags:
                 tags[t.commit.hexsha] = []
 
-                # We want to achieve first (commit wise) tags at the head of the list
+                # We want to put earlier tags (commit wise)
+                # at the head of the list
                 tags_commit_order.append(t)
 
             tags[t.commit.hexsha].append(t)
@@ -398,18 +451,79 @@ class GitBackend(VMNBackend):
         for k in tags.keys():
             tags[k] = sorted(tags[k], key=lambda t: t.object.tagged_date, reverse=True)
 
-        final_tags = []
+        final_list_of_tag_names = []
         for tag_object in tags_commit_order:
+            if branch and shallow:
+                cur_branch = self.get_active_branch(raise_on_detached_head=False)
+                commit_obj = self._be.head.commit
+                if branch != "HEAD":
+                    commit_obj = self.get_commit_object_from_branch_name(branch)
+
+                # TODO:: add debug print here
+                if commit_obj.committed_date < tag_object.commit.committed_date:
+                    continue
+
+                cur_commit_tags = self.get_all_commit_tags(tag_object.commit.hexsha)
+                tag_commit_in_current_branch = True
+                for t in cur_commit_tags:
+                    _, verinfo = self.get_version_info_from_tag_name(t)
+                    if "stamping" in verinfo:
+                        if (
+                                cur_branch
+                                != verinfo["stamping"]["app"]["stamped_on_branch"]
+                        ):
+                            tag_commit_in_current_branch = False
+
+                if not tag_commit_in_current_branch:
+                    continue
+
             for t in tags[tag_object.commit.hexsha]:
-                final_tags.append(t.name)
+                final_list_of_tag_names.append(t.name)
 
-        return final_tags
+        return final_list_of_tag_names
 
-    def get_all_brother_tags(self, tag_name):
-        cmd = ["--points-at", self.changeset(tag=tag_name)]
+    def get_commit_object_from_branch_name(self, bname):
+        # TODO:: Unfortunately, need to spend o(N) here
+        for branch in self._be.branches:
+            if bname != branch.name:
+                continue
+
+            # yay, we found the tag's commit object
+            return branch.commit
+
+        raise RuntimeError(
+            f"Somehow did not find a branch commit object for branch: {bname}"
+        )
+
+    def get_tag_object_from_tag_name(self, tname):
+        # TODO:: Unfortunately, need to spend o(N) here
+        t = None
+        for tag in self._be.tags:
+            if tname != tag.name:
+                continue
+
+            # yay, we found the tag's commit object
+            t = tag
+            if t.commit.author.name != "vmn":
+                continue
+
+            break
+        if t is None:
+            raise RuntimeError(f"Somehow did not find a tag object for tag: {tname}")
+
+        return t
+
+    def get_all_commit_tags(self, hexsha):
+        cmd = ["--points-at", hexsha]
         tags = self._be.git.tag(*cmd).split("\n")
 
+        if len(tags) == 1 and tags[0] == "":
+            tags.pop(0)
+
         return tags
+
+    def get_all_brother_tags(self, tag_name):
+        return self.get_all_commit_tags(self.changeset(tag=tag_name))
 
     def in_detached_head(self):
         return self._be.head.is_detached
@@ -479,22 +593,29 @@ class GitBackend(VMNBackend):
                 LOGGER.error("Active branch cannot be found in detached head")
                 raise RuntimeError()
 
-            out = self._be.git.branch("--contains", self._be.head.commit.hexsha)
-            out = out.split("\n")[1:]
-            active_branches = []
-            for item in out:
-                active_branches.append(item.strip())
+            active_branch = self.get_branch_from_changeset(self._be.head.commit.hexsha)
 
-            if len(active_branches) > 1:
-                LOGGER.info(
-                    "In detached head. Commit hash: "
-                    f"{self._be.head.commit.hexsha} is "
-                    f"related to multiple branches: {active_branches}. "
-                    "Using the first one as the active branch"
-                )
+        return active_branch
 
-            active_branch = active_branches[0]
+    def get_branch_from_changeset(self, hexsha):
+        out = self._be.git.branch("--contains", hexsha)
+        out = out.split("\n")[1:]
+        if not out:
+            # TODO:: add debug print here
+            out = self._be.git.branch().split("\n")[1:]
 
+        active_branches = []
+        for item in out:
+            active_branches.append(item.strip())
+        if len(active_branches) > 1:
+            LOGGER.info(
+                "In detached head. Commit hash: "
+                f"{self._be.head.commit.hexsha} is "
+                f"related to multiple branches: {active_branches}. "
+                "Using the first one as the active branch"
+            )
+
+        active_branch = active_branches[0]
         return active_branch
 
     def checkout(self, rev=None, tag=None, branch=None):
@@ -509,21 +630,22 @@ class GitBackend(VMNBackend):
 
         self._be.git.checkout(rev)
 
-    def last_user_changeset(self, name):
-        init_hex = None
-        for p in self._be.iter_commits():
-            if p.author.name == VMN_USER_NAME:
-                if f"{name}: Stamped initial version" in p.message:
-                    return p.hexsha
+    # TODO:: Missing impl in LocalFileBackend
+    def last_user_changeset(self):
+        p = self._be.head.commit
+        if p.author.name == VMN_USER_NAME:
+            if p.message.startswith(INIT_COMMIT_MESSAGE):
+                return p.hexsha
 
-                if p.message.startswith(INIT_COMMIT_MESSAGE):
-                    init_hex = p.hexsha
+            tags = self.get_all_commit_tags(p.hexsha)
+            for t in tags:
+                _, verinfo = self.get_version_info_from_tag_name(t)
+                if "stamping" in verinfo:
+                    return verinfo["stamping"]["app"]["changesets"]["."]["hash"]
 
-                continue
+            return None
 
-            return p.hexsha
-
-        return init_hex
+        return p.hexsha
 
     def remote(self):
         remote = tuple(self._origin.urls)[0]
@@ -586,7 +708,7 @@ class GitBackend(VMNBackend):
             LOGGER.debug("Exception info: ", exc_info=True)
 
     def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root:
             regex = VMN_ROOT_TAG_REGEX
@@ -750,30 +872,13 @@ class HostState(object):
         return actual_deps_state
 
 
-def get_client(path, from_file=False):
-    if from_file:
-        try:
-            be = LocalFileBackend(path)
-            return be, None
-        except RuntimeError:
-            err = (
-                f"path: {path} doesn't have .vmn dir so it cannot be "
-                f"used as local file backend"
-            )
-            return None, err
-
-    be_type = None
+def get_client(path):
     try:
         client = git.Repo(path, search_parent_directories=True)
         client.close()
 
-        be_type = "git"
+        be = GitBackend(path)
+        return be, None
     except git.exc.InvalidGitRepositoryError:
         err = f"repository path: {path} is not a functional git or repository.\n"
         return None, err
-
-    be = None
-    if be_type == "git":
-        be = GitBackend(path)
-
-    return be, None

@@ -38,7 +38,17 @@ class FSAppLayoutFixture(object):
         if be_type == "git":
             self._app_backend = GitBackend(self.test_app_remote, self.repo_path)
 
+
         self.set_working_repo(self.repo_path)
+
+        root_path = stamp_utils.resolve_root_path()
+        vmn_path = os.path.join(root_path, ".vmn")
+        pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
+
+        vmn.LOGGER = stamp_utils.init_stamp_logger(
+            os.path.join(vmn_path, vmn.LOG_FILENAME),
+            True
+        )
 
         self._repos = {
             TEST_REPO_NAME: {
@@ -276,7 +286,9 @@ class GitBackend(VersionControlBackend):
         client.close()
 
         self._git_backend = Repo.clone_from(
-            "{0}".format(self.remote_versions_root_path), "{0}".format(self.root_path)
+            "{0}".format(self.remote_versions_root_path),
+            "{0}".format(self.root_path),
+            # depth=1,
         )
 
         with open(os.path.join(versions_root_path, "init.txt"), "w+") as f:

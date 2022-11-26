@@ -20,8 +20,9 @@ CUR_PATH = "{0}/".format(os.path.dirname(__file__))
 VER_FILE_NAME = "last_known_app_version.yml"
 INIT_FILENAME = "conf.yml"
 LOCK_FILENAME = "vmn.lock"
+LOG_FILENAME = "vmn.log"
 
-IGNORED_FILES = [LOCK_FILENAME]
+IGNORED_FILES = [LOCK_FILENAME, LOG_FILENAME]
 VMN_ARGS = [
     "init",
     "init-app",
@@ -39,56 +40,31 @@ import version as version_mod
 from stamp_utils import HostState
 import stamp_utils
 
-LOGGER = stamp_utils.init_stamp_logger()
+LOGGER = None
 
 
 class VMNContextMAnager(object):
     def __init__(self, command_line):
+        root_path = stamp_utils.resolve_root_path()
+        vmn_path = os.path.join(root_path, ".vmn")
+
         self.args = parse_user_commands(command_line)
         global LOGGER
-        LOGGER = stamp_utils.init_stamp_logger(self.args.debug)
+        LOGGER = stamp_utils.init_stamp_logger(
+            os.path.join(vmn_path, LOG_FILENAME),
+            self.args.debug
+        )
 
         if command_line is None:
             command_line = sys.argv
 
-        if self.args.debug:
-            if not command_line[0].endswith("vmn"):
-                command_line.insert(0, "vmn")
-
-            LOGGER.debug(f"Command line: {' '.join(command_line)}")
-
-        cwd = os.getcwd()
-        if "VMN_WORKING_DIR" in os.environ:
-            cwd = os.environ["VMN_WORKING_DIR"]
+        if not command_line[0].endswith("vmn"):
+            command_line.insert(0, "vmn")
+        LOGGER.debug(f"\nCommand line: {' '.join(command_line)}")
 
         root = False
         if "root" in self.args:
             root = self.args.root
-
-        root_path = os.path.realpath(os.path.expanduser(cwd))
-        """
-            ".git" is the default app's backend in this case. If other backends will be added, 
-            then it can be moved to the configuration file as a default_backend or similar. 
-        """
-        exist = os.path.exists(os.path.join(root_path, ".vmn")) or os.path.exists(
-            os.path.join(root_path, ".git")
-        )
-        while not exist:
-            try:
-                prev_path = root_path
-                root_path = os.path.realpath(os.path.join(root_path, ".."))
-                if prev_path == root_path:
-                    raise RuntimeError()
-
-                exist = os.path.exists(
-                    os.path.join(root_path, ".vmn")
-                ) or os.path.exists(os.path.join(root_path, ".git"))
-            except:
-                root_path = None
-                break
-
-        if root_path is None:
-            raise RuntimeError("Running from an unmanaged directory")
 
         initial_params = {"root": root, "name": None, "root_path": root_path}
 
@@ -99,10 +75,8 @@ class VMNContextMAnager(object):
             if "command" in self.args and "stamp" in self.args.command:
                 initial_params["extra_commit_message"] = self.args.extra_commit_message
 
-        vmn_path = os.path.join(root_path, ".vmn")
-
         lock_file_path = os.path.join(vmn_path, LOCK_FILENAME)
-        pathlib.Path(os.path.dirname(lock_file_path)).mkdir(parents=True, exist_ok=True)
+
         self.lock = FileLock(lock_file_path)
         self.params = initial_params
         self.vcs = None
@@ -682,7 +656,7 @@ class VersionControlStamper(IVersionsStamper):
 
             # when k is the "main repo" repo
             if self.repo_name == k:
-                user_changeset = self.backend.last_user_changeset(self.name)
+                user_changeset = self.backend.last_user_changeset()
 
                 if v["hash"] != user_changeset:
                     found = False
@@ -1336,13 +1310,23 @@ def initialize_backend_attrs(vmn_ctx):
     if vcs.name is None:
         return
 
-    vcs.last_user_changeset = vcs.backend.last_user_changeset(vcs.name)
+    vcs.last_user_changeset = vcs.backend.last_user_changeset()
+    if vcs.last_user_changeset is None:
+        raise RuntimeError(
+            "Somehow vmn was not able to get last user changeset. "
+            "This usualy means that not enough git commit history was cloned. "
+            "This can happen when using shallow repositories. "
+            "Check your clone / checkout process."
+        )
+
     vcs.actual_deps_state = HostState.get_actual_deps_state(
         vcs.vmn_root_path,
         vcs.configured_deps,
     )
     vcs.actual_deps_state["."]["hash"] = vcs.last_user_changeset
-    vcs.current_version_info["stamping"]["app"]["changesets"] = vcs.actual_deps_state
+    vcs.current_version_info["stamping"]["app"]["changesets"] = copy.deepcopy(
+        vcs.actual_deps_state
+    )
     vcs.ver_info_from_repo = vcs.backend.get_first_reachable_version_info(
         vcs.name,
         vcs.root_context,
@@ -1553,7 +1537,14 @@ def handle_goto(vmn_ctx):
     if err:
         return err
 
+    expected_status = {"repo_tracked", "app_tracked"}
+    optional_status = {"detached", "repos_exist_locally", "modified"}
+
     vmn_ctx.params["deps_only"] = vmn_ctx.args.deps_only
+
+    status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
+    if status["error"]:
+        return 1
 
     if vmn_ctx.args.pull:
         try:
@@ -1598,21 +1589,13 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
         }
     )
 
-    path = os.path.join(versions_be_ifc.vmn_root_path, ".vmn", INIT_FILENAME)
-    # For compatability of early adapters of 0.4.0
-    old_path = os.path.join(versions_be_ifc.vmn_root_path, ".vmn", "vmn.init")
-    if not versions_be_ifc.backend.is_path_tracked(
-        path
-    ) and not versions_be_ifc.backend.is_path_tracked(old_path):
-        # Backward compatability with vmn 0.3.9 code:
-        file_path = backward_compatible_initialized_check(versions_be_ifc.vmn_root_path)
-
-        if file_path is None or not versions_be_ifc.backend.is_path_tracked(file_path):
-            status["repo_tracked"] = False
-            status["err_msgs"][
-                "repo_tracked"
-            ] = "vmn tracking is not yet initialized. Run vmn init on the repository"
-            status["state"].remove("repo_tracked")
+    path = os.path.join(versions_be_ifc.vmn_root_path, ".vmn")
+    if not versions_be_ifc.backend.is_path_tracked(path):
+        status["repo_tracked"] = False
+        status["err_msgs"][
+            "repo_tracked"
+        ] = "vmn tracking is not yet initialized. Run vmn init on the repository"
+        status["state"].remove("repo_tracked")
 
     if not versions_be_ifc.tracked:
         status["app_tracked"] = False
@@ -1780,8 +1763,9 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
                 LOGGER.error(status["err_msgs"][msg])
 
         LOGGER.error(
-            f"Repository status is in unexpected state: "
-            f"{((optional_status | status['state']) - expected_status)}"
+            f"Repository status is in unexpected state:\n"
+            f"{((optional_status | status['state']) - expected_status)}\n"
+            f"versus optional:\n{optional_status}"
         )
 
         status["error"] = True
@@ -1792,9 +1776,10 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
 
 
 def _init_app(versions_be_ifc, starting_version):
-    expected_status = {"repos_exist_locally", "repo_tracked", "modified"}
+    optional_status = {"modified", "detached"}
+    expected_status = {"repos_exist_locally", "repo_tracked"}
 
-    status = _get_repo_status(versions_be_ifc, expected_status)
+    status = _get_repo_status(versions_be_ifc, expected_status, optional_status)
     if status["error"]:
         return 1
 
@@ -1842,18 +1827,6 @@ def _init_app(versions_be_ifc, starting_version):
         raise RuntimeError()
 
     return 0
-
-
-def backward_compatible_initialized_check(root_path):
-    path = os.path.join(root_path, ".vmn")
-    file_path = None
-    for f in os.listdir(path):
-        if os.path.isfile(os.path.join(path, f)):
-            if f not in IGNORED_FILES:
-                file_path = os.path.join(path, f)
-                break
-
-    return file_path
 
 
 def _stamp_version(
@@ -2205,9 +2178,6 @@ def get_dirty_states(optional_status, status):
 
 
 def goto_version(vcs, params, version):
-    expected_status = {"repo_tracked", "app_tracked"}
-    optional_status = {"detached", "repos_exist_locally", "modified"}
-
     unique_id = None
     check_unique = False
     if version is not None:
@@ -2325,6 +2295,14 @@ def get_tag_name(vcs, verstr):
 
 
 def _update_repo(args):
+    global LOGGER
+    root_path = stamp_utils.resolve_root_path()
+    vmn_path = os.path.join(root_path, ".vmn")
+
+    LOGGER = stamp_utils.init_stamp_logger(
+        os.path.join(vmn_path, LOG_FILENAME)
+    )
+
     path, rel_path, branch_name, tag, changeset = args
 
     client = None
@@ -2400,6 +2378,14 @@ def _update_repo(args):
 
 
 def _clone_repo(args):
+    global LOGGER
+    root_path = stamp_utils.resolve_root_path()
+    vmn_path = os.path.join(root_path, ".vmn")
+
+    LOGGER = stamp_utils.init_stamp_logger(
+        os.path.join(vmn_path, LOG_FILENAME)
+    )
+
     path, rel_path, remote, vcs_type = args
     if os.path.exists(path):
         return {"repo": rel_path, "status": 0, "description": None}
@@ -2506,6 +2492,15 @@ def _goto_version(deps, vmn_root_path):
 
 
 def main(command_line=None):
+    global LOGGER
+
+    root_path = stamp_utils.resolve_root_path()
+    vmn_path = os.path.join(root_path, ".vmn")
+    pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
+
+    LOGGER = stamp_utils.init_stamp_logger(
+        os.path.join(vmn_path, LOG_FILENAME)
+    )
     try:
         return vmn_run(command_line)
     except Exception as exc:

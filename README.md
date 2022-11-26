@@ -1,9 +1,13 @@
+[![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
+[![codecov](https://codecov.io/gh/final-israel/vmn/branch/master/graph/badge.svg)](https://codecov.io/gh/final-israel/vmn)
+
+
 <p align="center">
   <img width="100" src="https://i.imgur.com/4gUaVKW.png">
   <br>
 <h1 align="center">Version managment package</h1>
 </p>
-A package for auto increasing version numbers of any application agnostic to language or architecture.
+Automatic version management and state recovery solution for any application agnostic to language or architecture.
 
 `vmn` is compliant with `Semver` (https://semver.org) semantics
 
@@ -32,12 +36,10 @@ Go ahead and read `vmn`'s docs :)
 - [x]  Addition of `buildmetadata` for an existing version, e.g.,` 1.6.0-rc23+build01.Info` [`Semver` compliant]
 - [ ] `WIP` Support "root apps" that are located in different repositories
 
-## Installation
+### Installation
 ```sh
 pip3 install vmn
 ```
-
-## Usage
 
 ### Create a playground
 ```sh
@@ -61,7 +63,7 @@ pip install -r  ./tests/requirements.txt
 pip install -r  ./tests/test_requirements.txt 
 pip install -e  ./
 ```
-
+## Usage
 ### `cd` into your git repository
 ```sh
 cd to/your/repository
@@ -291,7 +293,3 @@ conf:
 | `create_verinfo_files` | Tells `vmn` to create file for each stamped version. `vmn show --from-file` will work with these files instead of working with `git tags`. | See example `conf.yml` file above                            |
 |   `hide_zero_hotfix`   | Tells `vmn` to hide the fourth version octa when it is equal to zero. This way you will never see the fourth octa unless you will specifically stamp with `vmn stamp -r hotfix`. `True` by default. | See example `conf.yml` file above                            |
 |   `version_backends`   | Tells `vmn` to auto-embed the version string into one of the supported backends' files during the `vmn stamp` command. For instance, `vmn` will auto-embed the version string into `package.json` file if configured for `npm` projects. | See example `conf.yml` file above                            |
-
-
-
-[![codecov](https://codecov.io/gh/final-israel/vmn/branch/master/graph/badge.svg)](https://codecov.io/gh/final-israel/vmn)
