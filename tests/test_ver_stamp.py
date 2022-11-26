@@ -16,10 +16,10 @@ import stamp_utils
 vmn.LOGGER = stamp_utils.init_stamp_logger(True)
 
 
-def _init_vmn_in_repo(expected_res=0):
+def _run_vmn_init():
     with vmn.VMNContextMAnager(["init"]) as vmn_ctx:
         err = vmn.handle_init(vmn_ctx)
-        assert err == expected_res
+        return err
 
 
 def _init_app(app_name, starting_version="0.0.0"):
@@ -203,8 +203,11 @@ def _configure_empty_conf(app_layout, params):
 
 
 def test_basic_stamp(app_layout):
-    _init_vmn_in_repo()
-    _init_vmn_in_repo(1)
+    res = _run_vmn_init()
+    assert res == 0
+    res = _run_vmn_init()
+    assert res == 1
+
     _init_app(app_layout.app_name)
 
     for i in range(2):
@@ -247,8 +250,8 @@ def test_basic_stamp(app_layout):
 
 @pytest.mark.parametrize("hook_name", ["pre-push", "post-commit", "pre-commit"])
 def test_git_hooks(app_layout, capfd, hook_name):
-    _init_vmn_in_repo()
-    _init_vmn_in_repo(1)
+    _run_vmn_init()
+    _run_vmn_init(1)
     _, params = _init_app(app_layout.app_name)
 
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
@@ -312,7 +315,7 @@ def test_git_hooks(app_layout, capfd, hook_name):
 
 
 def test_jinja2_gen(app_layout, capfd):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _init_app(app_layout.app_name)
 
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
@@ -434,7 +437,7 @@ def test_jinja2_gen(app_layout, capfd):
 
 
 def test_basic_show(app_layout, capfd):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _init_app(app_layout.app_name)
 
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
@@ -591,7 +594,7 @@ def test_basic_show(app_layout, capfd):
 
 
 def test_show_from_file(app_layout, capfd):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _, params = _init_app(app_layout.app_name)
     capfd.readouterr()
 
@@ -769,7 +772,7 @@ def test_show_from_file(app_layout, capfd):
 
 
 def test_show_from_file_conf_changed(app_layout, capfd):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _, params = _init_app(app_layout.app_name)
     capfd.readouterr()
 
@@ -845,7 +848,7 @@ def test_show_from_file_conf_changed(app_layout, capfd):
 
 
 def test_multi_repo_dependency(app_layout, capfd):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _init_app(app_layout.app_name)
 
     err, _, params = _stamp_app(app_layout.app_name, "patch")
@@ -924,7 +927,7 @@ def test_multi_repo_dependency(app_layout, capfd):
 
 
 def test_goto_deleted_repos(app_layout):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _init_app(app_layout.app_name)
 
     err, _, params = _stamp_app(app_layout.app_name, "patch")
@@ -945,7 +948,7 @@ def test_goto_deleted_repos(app_layout):
 
 
 def test_basic_root_stamp(app_layout):
-    _init_vmn_in_repo()
+    _run_vmn_init()
 
     app_name = "root_app/app1"
     _init_app(app_name)
@@ -1020,7 +1023,7 @@ def test_basic_root_stamp(app_layout):
 
 
 def test_starting_version(app_layout):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _init_app(app_layout.app_name, "1.2.3")
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
@@ -1030,7 +1033,7 @@ def test_starting_version(app_layout):
 
 
 def test_rc_stamping(app_layout, capfd):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _init_app(app_layout.app_name, "1.2.3")
 
     err, ver_info, _ = _stamp_app(
@@ -1268,7 +1271,7 @@ def test_rc_stamping(app_layout, capfd):
 
 
 def test_rc_goto(app_layout, capfd):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _init_app(app_layout.app_name, "1.2.3")
 
     try:
@@ -1295,7 +1298,7 @@ def test_rc_goto(app_layout, capfd):
 
 
 def test_goto_print(app_layout, capfd):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _init_app(app_layout.app_name, "1.2.3")
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="minor")
@@ -1345,7 +1348,7 @@ def test_version_template():
 
 
 def test_basic_goto(app_layout, capfd):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _init_app(app_layout.app_name, "1.2.3")
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
@@ -1476,7 +1479,7 @@ def test_basic_goto(app_layout, capfd):
 
 
 def test_stamp_on_branch_merge_squash(app_layout):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _init_app(app_layout.app_name, "1.2.3")
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
@@ -1511,7 +1514,7 @@ def test_stamp_on_branch_merge_squash(app_layout):
 
 
 def test_get_version(app_layout):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _init_app(app_layout.app_name)
 
     main_branch = app_layout._app_backend.be.get_active_branch()
@@ -1532,7 +1535,7 @@ def test_get_version(app_layout):
 
 
 def test_get_version_number_from_file(app_layout):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _, params = _init_app(app_layout.app_name, "0.2.1")
 
     assert vmn.VersionControlStamper.get_version_number_from_file(
@@ -1541,7 +1544,7 @@ def test_get_version_number_from_file(app_layout):
 
 
 def test_read_version_from_file(app_layout):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _, params = _init_app(app_layout.app_name, "0.2.1")
 
     file_path = params["version_file_path"]
@@ -1561,7 +1564,7 @@ def test_read_version_from_file(app_layout):
 
 
 def test_manual_file_adjustment(app_layout):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _, params = _init_app(app_layout.app_name, "0.2.1")
 
     file_path = params["version_file_path"]
@@ -1586,7 +1589,7 @@ def test_manual_file_adjustment(app_layout):
 
 
 def test_manual_file_adjustment_with_major_version(app_layout):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _, params = _init_app(app_layout.app_name, "0.2.1")
 
     file_path = params["version_file_path"]
@@ -1611,7 +1614,7 @@ def test_manual_file_adjustment_with_major_version(app_layout):
 
 
 def test_basic_root_show(app_layout, capfd):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     app_name = "root_app/app1"
     ver_info, params = _init_app(app_name, "0.2.1")
     data = ver_info["stamping"]["app"]
@@ -1667,7 +1670,7 @@ def test_basic_root_show(app_layout, capfd):
 
 
 def test_version_backends_cargo(app_layout, capfd):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _init_app(app_layout.app_name)
 
     err, _, params = _stamp_app(app_layout.app_name, "patch")
@@ -1709,7 +1712,7 @@ def test_version_backends_cargo(app_layout, capfd):
 
 
 def test_conf(app_layout, capfd):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _init_app(app_layout.app_name)
 
     err, _, params = _stamp_app(app_layout.app_name, "patch")
@@ -1767,7 +1770,7 @@ def test_conf(app_layout, capfd):
 
 
 def test_version_backends_npm(app_layout, capfd):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _init_app(app_layout.app_name)
 
     err, _, params = _stamp_app(app_layout.app_name, "patch")
@@ -1846,7 +1849,7 @@ def test_backward_compatability_with_previous_vmn(app_layout, capfd):
 
 
 def test_remotes(app_layout):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _init_app(app_layout.app_name)
 
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
@@ -1874,7 +1877,7 @@ def test_remotes(app_layout):
 
 
 def test_add_bm(app_layout, capfd):
-    _init_vmn_in_repo()
+    _run_vmn_init()
     _init_app(app_layout.app_name)
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
@@ -2089,3 +2092,17 @@ def test_add_bm(app_layout, capfd):
 
     err, ver_info, _ = _release_app(app_layout.app_name, "0.0.4-alpha1")
     assert err == 0
+
+
+def test_shallow_repo_stamp(app_layout):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
+
+    clone_path = app_layout.create_new_clone("test_repo", depth=1)
+    app_layout.set_working_repo(clone_path)
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
