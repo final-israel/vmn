@@ -15,6 +15,7 @@ import tomlkit
 import json
 from packaging import version as pversion
 import jinja2
+from pprint import pformat
 
 CUR_PATH = "{0}/".format(os.path.dirname(__file__))
 VER_FILE_NAME = "last_known_app_version.yml"
@@ -45,11 +46,13 @@ LOGGER = None
 
 class VMNContextMAnager(object):
     def __init__(self, command_line):
-        root_path = stamp_utils.resolve_root_path()
-        vmn_path = os.path.join(root_path, ".vmn")
-
         self.args = parse_user_commands(command_line)
         global LOGGER
+
+        root_path = stamp_utils.resolve_root_path()
+        vmn_path = os.path.join(root_path, ".vmn")
+        pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
+
         LOGGER = stamp_utils.init_stamp_logger(
             os.path.join(vmn_path, LOG_FILENAME),
             self.args.debug
@@ -1078,6 +1081,23 @@ class VersionControlStamper(IVersionsStamper):
                 LOGGER.info("Would have pushed with tags.\n" f"tags: {all_tags} ")
             else:
                 self.backend.push(all_tags)
+
+                count = 0
+                res = self.backend.check_for_outgoing_changes()
+                while count < 5 and res:
+                    count += 1
+                    LOGGER.error(
+                        f"BUG: Somehow we have outgoing changes right "
+                        f"after publishing:\n{res}"
+                    )
+                    time.sleep(count)
+                    res = self.backend.check_for_outgoing_changes()
+
+                if count == 5 and res:
+                    raise RuntimeError(
+                        f"BUG: Somehow we have outgoing changes right "
+                        f"after publishing:\n{res}"
+                    )
         except Exception:
             LOGGER.debug("Logged Exception message:", exc_info=True)
             LOGGER.info(f"Reverting vmn changes for tags: {tags} ...")
@@ -2151,6 +2171,10 @@ def gen(vcs, params, verstr=None):
     with open(params["jinja_template"]) as file_:
         template = jinja2.Template(file_.read())
 
+    LOGGER.debug(
+        f"Possible keywords for your Jinja template:\n"
+        f"{pformat(tmplt_value)}"
+    )
     out = template.render(tmplt_value)
 
     out_path = params["output"]
@@ -2173,6 +2197,17 @@ def get_dirty_states(optional_status, status):
         "detached",
     }
     dirty_states -= {"detached", "repos_exist_locally"}
+
+    try:
+        debug_msg = ''
+        for k in status["err_msgs"].keys():
+            if k in dirty_states:
+                debug_msg = f"{debug_msg}\n{status['err_msgs'][k]}"
+
+        if debug_msg:
+            LOGGER.debug(f'Debug for dirty states call:\n{debug_msg}')
+    except Exception as exc:
+        pass
 
     return dirty_states
 
@@ -2492,15 +2527,6 @@ def _goto_version(deps, vmn_root_path):
 
 
 def main(command_line=None):
-    global LOGGER
-
-    root_path = stamp_utils.resolve_root_path()
-    vmn_path = os.path.join(root_path, ".vmn")
-    pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
-
-    LOGGER = stamp_utils.init_stamp_logger(
-        os.path.join(vmn_path, LOG_FILENAME)
-    )
     try:
         return vmn_run(command_line)
     except Exception as exc:
