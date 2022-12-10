@@ -430,7 +430,8 @@ class GitBackend(VMNBackend):
         tag_objects = []
         for tname in tag_names:
             o = self.get_tag_object_from_tag_name(tname)
-            tag_objects.append(o)
+            if o:
+                tag_objects.append(o)
 
         tags_commit_order = []
         tags = {}
@@ -502,14 +503,19 @@ class GitBackend(VMNBackend):
             if tname != tag.name:
                 continue
 
-            # yay, we found the tag's commit object
-            t = tag
-            if t.commit.author.name != "vmn":
+            if tag.commit.author.name != "vmn":
                 continue
 
+            if tag.tag is None:
+                continue
+
+            # yay, we found the tag's commit object
+            t = tag
+
             break
+
         if t is None:
-            raise RuntimeError(f"Somehow did not find a tag object for tag: {tname}")
+            LOGGER.debug(f"Somehow did not find a tag object for tag: {tname}")
 
         return t
 
