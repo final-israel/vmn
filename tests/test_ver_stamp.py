@@ -2101,3 +2101,42 @@ def test_shallow_repo_stamp(app_layout):
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
+
+
+def test_same_user_tag(app_layout):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
+
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "test.tst",
+        "bla",
+    )
+
+    app_layout.create_tag("HEAD~3", f"{app_layout.app_name}_2.0.0")
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+
+def test_perf_show(app_layout):
+    import subprocess
+    import shutil
+    base_cmd = ["wget", 'https://github.com/final-israel/vmn/releases/download/vmn_stamping_action_0.0.1/perf.tgz' ]
+    subprocess.call(base_cmd, cwd=app_layout.base_dir)
+    shutil.rmtree(app_layout.test_app_remote)
+    shutil.rmtree(app_layout.repo_path)
+    base_cmd = ["tar", "-xzf", "./perf.tgz"]
+    subprocess.call(base_cmd, cwd=app_layout.base_dir)
+    base_cmd = ["git", "clone", app_layout.test_app_remote, app_layout.repo_path]
+    subprocess.call(base_cmd, cwd=app_layout.base_dir)
+
+    import time
+    t1 = time.perf_counter()
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+    t2 = time.perf_counter()
+    diff = t2 - t1
+
+    assert diff < 2

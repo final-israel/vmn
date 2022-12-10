@@ -129,6 +129,19 @@ class FSAppLayoutFixture(object):
             cwd=self.repo_path,
         )
 
+    def create_tag(self, commit_hash, tag_name):
+        import subprocess
+
+        base_cmd = ["git", "tag", tag_name, commit_hash]
+
+        LOGGER.info(f"going to run: {' '.join(base_cmd)}")
+        subprocess.call(base_cmd, cwd=self.repo_path)
+
+        base_cmd = ["git", "push", "--tags"]
+
+        LOGGER.info(f"going to run: {' '.join(base_cmd)}")
+        subprocess.call(base_cmd, cwd=self.repo_path)
+
     def stamp_with_previous_vmn(self):
         import subprocess
 
