@@ -408,7 +408,7 @@ class GitBackend(VMNBackend):
             return None
 
     def tags(self, branch=None, filter=None):
-        cmd = ["--sort", "committerdate"]
+        cmd = ["--sort", "taggerdate"]
         shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
 
         if branch is not None:
@@ -799,22 +799,9 @@ class GitBackend(VMNBackend):
             return tag_name, None
 
         all_tags = {}
-        found = False
-        # TODO: maybe use iter_commits?
-        res = VMNBackend.deserialize_vmn_tag_name(tag_name)
-        tag_prefix = VMNBackend.get_root_app_name_from_name(res["app_name"])
-        if tag_prefix is None:
-            tag_prefix = res["app_name"]
 
-        tags = self.tags(filter=f"{tag_prefix}*")
+        tags = self.get_all_brother_tags(tag_name)
         for tag in tags:
-            if found and commit_tag_obj.hexsha != self._be.commit(tag).hexsha:
-                break
-            if commit_tag_obj.hexsha != self._be.commit(tag).hexsha:
-                continue
-
-            found = True
-
             tagd = VMNBackend.deserialize_vmn_tag_name(tag)
             tagd.update({"tag": tag})
             tagd["message"] = self._be.tag(f"refs/tags/{tag}").object.message
