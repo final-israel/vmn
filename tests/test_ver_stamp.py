@@ -172,7 +172,7 @@ def _configure_2_deps(app_layout, params):
     conf = {
         "deps": {
             "../": {
-                "test_repo": {
+                "test_repo_0": {
                     "vcs_type": app_layout.be_type,
                     "remote": app_layout._app_backend.be.remote(),
                 }
@@ -225,7 +225,7 @@ def test_basic_stamp(app_layout):
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
 
-    app_layout.write_file_commit_and_push("test_repo", "a/b/c/f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "a/b/c/f1.file", "msg1")
     os.environ["VMN_WORKING_DIR"] = f"{app_layout.repo_path}/a/b/c/"
 
     for i in range(2):
@@ -248,19 +248,21 @@ def test_basic_stamp(app_layout):
 
 @pytest.mark.parametrize("hook_name", ["pre-push", "post-commit", "pre-commit"])
 def test_git_hooks(app_layout, capfd, hook_name):
-    _run_vmn_init()
-    _run_vmn_init(1)
+    res = _run_vmn_init()
+    assert res == 0
+    res = _run_vmn_init()
+    assert res == 1
     _, params = _init_app(app_layout.app_name)
 
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.txt", "connnntenctt")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "connnntenctt")
 
     # More post-checkout, post-commit, post-merge, post-rewrite, pre-commit, pre-push
     app_layout.write_file_commit_and_push(
-        "test_repo",
+        "test_repo_0",
         f".git/hooks/{hook_name}",
         "#/bin/bash\nexit 1",
         add_exec=True,
@@ -319,7 +321,7 @@ def test_jinja2_gen(app_layout, capfd):
     # read to clear stderr and out
     capfd.readouterr()
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.txt", "content")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content")
 
     jinja2_content = (
         "VERSION: {{version}}\n"
@@ -335,11 +337,11 @@ def test_jinja2_gen(app_layout, capfd):
         "{% endfor %}\n"
     )
     app_layout.write_file_commit_and_push(
-        "test_repo", "f1.jinja2", jinja2_content, commit=False
+        "test_repo_0", "f1.jinja2", jinja2_content, commit=False
     )
 
-    tpath = os.path.join(app_layout._repos["test_repo"]["path"], "f1.jinja2")
-    opath = os.path.join(app_layout._repos["test_repo"]["path"], "jinja_out.txt")
+    tpath = os.path.join(app_layout._repos["test_repo_0"]["path"], "f1.jinja2")
+    opath = os.path.join(app_layout._repos["test_repo_0"]["path"], "jinja_out.txt")
     err = _gen(app_layout.app_name, tpath, opath)
     assert err == 0
 
@@ -381,7 +383,7 @@ def test_jinja2_gen(app_layout, capfd):
         "to jump to that version.\nRefusing to gen." in captured.err
     )
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.txt", "content")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content")
 
     with vmn.VMNContextMAnager(["goto", "-v", "0.0.1", "test_app"]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
@@ -456,9 +458,9 @@ def test_basic_show(app_layout, capfd):
     except Exception:
         assert False
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1", commit=False)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1", commit=False)
 
     err = _show(app_layout.app_name)
     assert err == 0
@@ -484,7 +486,7 @@ def test_basic_show(app_layout, capfd):
     except Exception:
         assert False
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1", push=False)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1", push=False)
     err = _show(app_layout.app_name, verbose=True)
     assert err == 0
 
@@ -497,7 +499,7 @@ def test_basic_show(app_layout, capfd):
     except Exception:
         assert False
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
     err = _show(app_layout.app_name, verbose=True)
     assert err == 0
 
@@ -605,7 +607,7 @@ def test_show_from_file(app_layout, capfd):
         "create_verinfo_files": True,
         "deps": {
             "../": {
-                "test_repo": {
+                "test_repo_0": {
                     "vcs_type": app_layout.be_type,
                     "remote": app_layout._app_backend.be.remote(),
                 }
@@ -658,7 +660,7 @@ def test_show_from_file(app_layout, capfd):
         "create_verinfo_files": True,
         "deps": {
             "../": {
-                "test_repo": {
+                "test_repo_0": {
                     "vcs_type": app_layout.be_type,
                     "remote": app_layout._app_backend.be.remote(),
                 }
@@ -777,7 +779,7 @@ def test_show_from_file_conf_changed(app_layout, capfd):
         "create_verinfo_files": True,
         "deps": {
             "../": {
-                "test_repo": {
+                "test_repo_0": {
                     "vcs_type": app_layout.be_type,
                     "remote": app_layout._app_backend.be.remote(),
                 }
@@ -806,7 +808,7 @@ def test_show_from_file_conf_changed(app_layout, capfd):
         "template": "[{major}][.{minor}][.{patch}]",
         "deps": {
             "../": {
-                "test_repo": {
+                "test_repo_0": {
                     "vcs_type": app_layout.be_type,
                     "remote": app_layout._app_backend.be.remote(),
                 }
@@ -887,7 +889,7 @@ def test_multi_repo_dependency(app_layout, capfd):
     with open(params["app_conf_path"], "r") as f:
         data = yaml.safe_load(f)
         assert "../" in data["conf"]["deps"]
-        assert "test_repo" in data["conf"]["deps"]["../"]
+        assert "test_repo_0" in data["conf"]["deps"]["../"]
         assert "repo1" in data["conf"]["deps"]["../"]
         assert "repo2" in data["conf"]["deps"]["../"]
 
@@ -993,7 +995,7 @@ def test_basic_root_stamp(app_layout):
     data = ver_info["stamping"]["root_app"]
     assert data["version"] == 3
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "blabla")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "blabla")
 
     app_name = "root_app/app1"
     err, ver_info, params = _stamp_app(app_name, "major")
@@ -1041,21 +1043,21 @@ def test_rc_stamping(app_layout, capfd):
     assert data["_version"] == "1.3.0-rc1"
     assert data["prerelease"] == "rc"
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
     err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "1.3.0-rc2"
     assert data["prerelease"] == "rc"
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
     err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="beta")
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "1.3.0-beta1"
     assert data["prerelease"] == "beta"
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
     err, ver_info, _ = _stamp_app(app_layout.app_name)
     assert err == 0
@@ -1087,7 +1089,7 @@ def test_rc_stamping(app_layout, capfd):
     assert tags_before == tags_after
 
     for item in ["2.0.0", "3.0.0"]:
-        app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+        app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
         err, ver_info, _ = _stamp_app(
             app_layout.app_name, release_mode="major", prerelease="rc"
         )
@@ -1105,7 +1107,7 @@ def test_rc_stamping(app_layout, capfd):
         assert data["_version"] == item
         assert data["prerelease"] == "release"
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="minor")
     assert err == 0
@@ -1114,7 +1116,7 @@ def test_rc_stamping(app_layout, capfd):
     assert data["_version"] == "3.1.0"
     assert data["prerelease"] == "release"
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, release_mode="minor", prerelease="rc"
@@ -1125,7 +1127,7 @@ def test_rc_stamping(app_layout, capfd):
     assert data["_version"] == "3.2.0-rc1"
     assert data["prerelease"] == "rc"
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, release_mode="minor", prerelease="rc"
@@ -1143,7 +1145,7 @@ def test_rc_stamping(app_layout, capfd):
     assert data["_version"] == "3.3.0-rc1"
     assert data["prerelease"] == "rc"
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
     err, ver_info, _ = _stamp_app(app_layout.app_name)
     assert err == 0
@@ -1153,7 +1155,7 @@ def test_rc_stamping(app_layout, capfd):
     assert data["prerelease"] == "rc"
 
     for item in ["3.4.0", "3.5.0"]:
-        app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+        app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
         err, ver_info, _ = _stamp_app(
             app_layout.app_name, release_mode="minor", prerelease="release"
@@ -1165,7 +1167,7 @@ def test_rc_stamping(app_layout, capfd):
         assert data["prerelease"] == "release"
         assert not data["prerelease_count"]
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, release_mode="minor", prerelease="rc"
@@ -1176,7 +1178,7 @@ def test_rc_stamping(app_layout, capfd):
     assert data["_version"] == "3.6.0-rc1"
     assert data["prerelease"] == "rc"
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
     err, ver_info, _ = _stamp_app(app_layout.app_name)
     assert err == 0
@@ -1216,7 +1218,7 @@ def test_rc_stamping(app_layout, capfd):
     )
     assert err == 0
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, release_mode="minor", prerelease="rc"
@@ -1240,14 +1242,14 @@ def test_rc_stamping(app_layout, capfd):
     captured = capfd.readouterr()
     assert "[INFO] 3.7.0\n" == captured.out
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, release_mode="minor", prerelease="rc"
     )
 
     for i in range(2):
-        app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+        app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
         err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
 
     _, ver_info, _ = _release_app(app_layout.app_name, "3.8.0-rc2")
@@ -1258,7 +1260,7 @@ def test_rc_stamping(app_layout, capfd):
     captured = capfd.readouterr()
     assert "[INFO] 3.8.0-rc3\n" == captured.out
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
     err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
     assert err == 1
 
@@ -1299,7 +1301,7 @@ def test_goto_print(app_layout, capfd):
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="minor")
 
-    app_layout.write_file_commit_and_push("test_repo", "my.js", "some text")
+    app_layout.write_file_commit_and_push("test_repo_0", "my.js", "some text")
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="major")
 
@@ -1350,7 +1352,7 @@ def test_basic_goto(app_layout, capfd):
     err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
     assert err == 0
 
-    app_layout.write_file_commit_and_push("test_repo", "a.yxy", "msg")
+    app_layout.write_file_commit_and_push("test_repo_0", "a.yxy", "msg")
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -1397,7 +1399,7 @@ def test_basic_goto(app_layout, capfd):
 
     rc1 = app_layout._app_backend.be.changeset()
 
-    app_layout.write_file_commit_and_push("test_repo", "a.yxy", "msg")
+    app_layout.write_file_commit_and_push("test_repo_0", "a.yxy", "msg")
 
     err, ver_info, _ = _stamp_app(root_app_name, "minor")
     assert err == 0
@@ -1423,7 +1425,7 @@ def test_basic_goto(app_layout, capfd):
 
     assert rc2 == app_layout._app_backend.be.changeset()
 
-    app_layout.write_file_commit_and_push("test_repo", "a.yxy", "msg")
+    app_layout.write_file_commit_and_push("test_repo_0", "a.yxy", "msg")
 
     err, ver_info, _ = _stamp_app(root_app_name, "minor")
     assert err == 0
@@ -1483,7 +1485,7 @@ def test_stamp_on_branch_merge_squash(app_layout):
     main_branch = app_layout._app_backend.be.get_active_branch()
 
     app_layout._app_backend.be.checkout(("-b", "new_branch"))
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
     app_layout._app_backend._origin.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -1491,7 +1493,7 @@ def test_stamp_on_branch_merge_squash(app_layout):
     app_layout._app_backend._origin.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
-    app_layout.write_file_commit_and_push("test_repo", "f3.file", "msg3")
+    app_layout.write_file_commit_and_push("test_repo_0", "f3.file", "msg3")
     app_layout._app_backend._origin.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -1515,7 +1517,7 @@ def test_get_version(app_layout):
     main_branch = app_layout._app_backend.be.get_active_branch()
 
     app_layout._app_backend.be.checkout(("-b", "new_branch"))
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
     app_layout._app_backend._origin.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -1550,7 +1552,7 @@ def test_read_version_from_file(app_layout):
         {},
     )
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
     app_layout._app_backend._origin.pull(rebase=True)
     with open(file_path, "r") as fid:
         ver_dict = yaml.load(fid, Loader=yaml.FullLoader)
@@ -1572,7 +1574,7 @@ def test_manual_file_adjustment(app_layout):
     }
     # now we want to override the version by changing the file version:
     app_layout.write_file_commit_and_push(
-        "test_repo",
+        "test_repo_0",
         ".vmn/test_app/{}".format(vmn.VER_FILE_NAME),
         yaml.dump(verfile_manual_content),
     )
@@ -1597,7 +1599,7 @@ def test_manual_file_adjustment_with_major_version(app_layout):
     }
     # now we want to override the version by changing the file version:
     app_layout.write_file_commit_and_push(
-        "test_repo",
+        "test_repo_0",
         ".vmn/test_app/{}".format(vmn.VER_FILE_NAME),
         yaml.dump(verfile_manual_content),
     )
@@ -1672,7 +1674,7 @@ def test_version_backends_cargo(app_layout, capfd):
     assert err == 0
 
     app_layout.write_file_commit_and_push(
-        "test_repo",
+        "test_repo_0",
         "Cargo.toml",
         toml.dumps({"package": {"name": "test_app", "version": "some ignored string"}}),
     )
@@ -1681,7 +1683,7 @@ def test_version_backends_cargo(app_layout, capfd):
         "version_backends": {"cargo": {"path": "Cargo.toml"}},
         "deps": {
             "../": {
-                "test_repo": {
+                "test_repo_0": {
                     "vcs_type": app_layout.be_type,
                     "remote": app_layout._app_backend.be.remote(),
                 }
@@ -1713,12 +1715,12 @@ def test_conf(app_layout, capfd):
     err, _, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.txt", "text")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text")
 
     conf = {
         "deps": {
             "../": {
-                "test_repo": {
+                "test_repo_0": {
                     "vcs_type": app_layout.be_type,
                     "remote": app_layout._app_backend.be.remote(),
                 }
@@ -1772,7 +1774,7 @@ def test_version_backends_npm(app_layout, capfd):
     assert err == 0
 
     app_layout.write_file_commit_and_push(
-        "test_repo",
+        "test_repo_0",
         "package.json",
         json.dumps({"name": "test_app", "version": "some ignored string"}),
     )
@@ -1782,7 +1784,7 @@ def test_version_backends_npm(app_layout, capfd):
         "version_backends": {"npm": {"path": "package.json"}},
         "deps": {
             "../": {
-                "test_repo": {
+                "test_repo_0": {
                     "vcs_type": app_layout.be_type,
                     "remote": app_layout._app_backend.be.remote(),
                 }
@@ -1816,7 +1818,7 @@ def test_backward_compatability_with_previous_vmn(app_layout, capfd):
     assert err == 0
     assert "[INFO] 0.0.3\n" == captured.out
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
     err, ver_info, _ = _stamp_app("app1", "patch")
     assert err == 0
@@ -1864,7 +1866,7 @@ def test_remotes(app_layout):
     for cmd in cmds:
         subprocess.call(cmd, cwd=app_layout.repo_path)
 
-        app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+        app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
         err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
         assert err == 0
         assert ver_info["stamping"]["app"]["_version"] == f"0.0.{c}"
@@ -1888,7 +1890,7 @@ def test_add_bm(app_layout, capfd):
     # TODO assert matching version
 
     app_layout.write_file_commit_and_push(
-        "test_repo",
+        "test_repo_0",
         "file.txt",
         "str1",
     )
@@ -1936,7 +1938,7 @@ def test_add_bm(app_layout, capfd):
     assert len(yaml.safe_load(captured.out)["versions"]) == 2
 
     app_layout.write_file_commit_and_push(
-        "test_repo",
+        "test_repo_0",
         "file.txt",
         "str1",
     )
@@ -2006,7 +2008,7 @@ def test_add_bm(app_layout, capfd):
            "doesn't comply " in captured.err
 
     app_layout.write_file_commit_and_push(
-        "test_repo",
+        "test_repo_0",
         "test.yml",
         yaml.dump({"build_flags": "-g", "build_time": "Debug"}),
         commit=False,
@@ -2022,14 +2024,14 @@ def test_add_bm(app_layout, capfd):
         )
         assert err == 0
         app_layout.write_file_commit_and_push(
-            "test_repo",
+            "test_repo_0",
             "test.yml",
             yaml.dump({"build_flags": "-g", "build_time": "Debug"}),
             commit=False,
         )
 
     app_layout.write_file_commit_and_push(
-        "test_repo",
+        "test_repo_0",
         "test.yml",
         yaml.dump({"build_flags": "-g2", "build_time": "Debug"}),
         commit=False,
@@ -2059,7 +2061,7 @@ def test_add_bm(app_layout, capfd):
     assert yaml.safe_load(captured.out)["versions"][0] == "0.0.3"
 
     app_layout.write_file_commit_and_push(
-        "test_repo",
+        "test_repo_0",
         "test.tst",
         "bla",
     )
@@ -2076,7 +2078,7 @@ def test_add_bm(app_layout, capfd):
     assert err == 0
 
     app_layout.write_file_commit_and_push(
-        "test_repo",
+        "test_repo_0",
         "test.test",
         yaml.dump(
             {
@@ -2096,7 +2098,7 @@ def test_shallow_repo_stamp(app_layout):
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
 
-    clone_path = app_layout.create_new_clone("test_repo", depth=1)
+    clone_path = app_layout.create_new_clone("test_repo_0", depth=1)
     app_layout.set_working_repo(clone_path)
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert err == 0
@@ -2109,7 +2111,7 @@ def test_same_user_tag(app_layout):
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
 
     app_layout.write_file_commit_and_push(
-        "test_repo",
+        "test_repo_0",
         "test.tst",
         "bla",
     )

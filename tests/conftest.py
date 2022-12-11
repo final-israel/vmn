@@ -38,7 +38,6 @@ class FSAppLayoutFixture(object):
         if be_type == "git":
             self._app_backend = GitBackend(self.test_app_remote, self.repo_path)
 
-
         self.set_working_repo(self.repo_path)
 
         root_path = stamp_utils.resolve_root_path()
@@ -51,7 +50,7 @@ class FSAppLayoutFixture(object):
         )
 
         self._repos = {
-            TEST_REPO_NAME: {
+            f"{TEST_REPO_NAME}_0": {
                 "path": self.repo_path,
                 "type": be_type,
                 "remote": self.test_app_remote,
@@ -72,7 +71,6 @@ class FSAppLayoutFixture(object):
     def create_repo(self, repo_name, repo_type):
         path = os.path.join(self.base_dir, f"{repo_name}")
         remote_path = f"{path}_remote"
-        path = f"{path}_0"
 
         if repo_type == "git":
             be = GitBackend(remote_path, path)
@@ -159,7 +157,7 @@ class FSAppLayoutFixture(object):
             "-t",
             f"-u{os.getuid()}:{os.getgid()}",
             "-v",
-            f"{self.repo_path}:/test_repo",
+            f"{self.repo_path}:/test_repo_0",
             "-v",
             f"{self.base_dir}:{self.base_dir}",
             "previous_vmn_stamper:latest",
