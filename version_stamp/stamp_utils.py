@@ -408,100 +408,48 @@ class GitBackend(VMNBackend):
             return None
 
     def tags(self, filter, type=RELATIVE_TO_GLOBAL_TYPE):
-        # git log --author=vmn --decorate=full --simplify-by-decoration --pretty=oneline refs/heads/master
-        branch = None
         if type == RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE:
-            branch = self.get_active_branch(raise_on_detached_head=False)
+            cmd_suffix = f"refs/heads/{self.get_active_branch(raise_on_detached_head=False)}"
         elif type == RELATIVE_TO_CURRENT_VCS_POSITION_TYPE:
-            branch = "HEAD"
+            cmd_suffix = "HEAD"
+        else:
+            cmd_suffix = f"--branches"
 
-        cmd = [f"--tags={filter}", f"--author={VMN_USER_NAME}", "--pretty=%H,,,%D", "--decorate=full"]
+        cmd = [
+            f"--grep={filter}",
+            f"-1",
+            f"--author={VMN_USER_NAME}",
+            "--pretty=%H,,,%D",
+            "--decorate=short",
+            cmd_suffix
+        ]
         shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
 
         tag_names = self._be.git.log(*cmd).split("\n")
+        if len(tag_names) == 1 and tag_names[0] == "":
+            tag_names.pop(0)
+
         if not tag_names:
             return tag_names
 
+        items = tag_names[0].split(',,,')
+        tag_names[0].split(',,,')[1].split(',')
+
         tag_objects = []
-        idx = -1
-        item = tag_names[idx]
-        res = item.split(" ")
-        commit_hash = res[0]
-        tname = res[1]
-        while abs(idx) != len(tag_names):
-            prev_commit_hash = commit_hash
+        for t in items[1].split(','):
+            if not "tag:" in t:
+                continue
+
+            tname = t.split("tag:")[1].strip()
             o = self.get_tag_object_from_tag_name(tname)
             if o:
                 tag_objects.append(o)
 
-            idx -= 1
-            item = tag_names[idx]
-            res = item.split(" ")
-            commit_hash = res[0]
-            tname = res[1]
-            if not o:
-                continue
-
-            while commit_hash == prev_commit_hash:
-                o = self.get_tag_object_from_tag_name(tname)
-                if o:
-                    tag_objects.append(o)
-
-                idx -= 1
-                item = tag_names[idx]
-                res = item.split(" ")
-                commit_hash = res[0]
-                tname = res[1]
-
-            break
-
-        tags_commit_order = []
-        tags = {}
-        for t in tag_objects:
-            if t.commit.hexsha not in tags:
-                tags[t.commit.hexsha] = []
-
-                # We want to put earlier tags (commit wise)
-                # at the head of the list
-                tags_commit_order.append(t)
-
-            tags[t.commit.hexsha].append(t)
-
-        tags_commit_order = sorted(
-            tags_commit_order, key=lambda t: t.commit.committed_date, reverse=True
-        )
-
-        for k in tags.keys():
-            tags[k] = sorted(tags[k], key=lambda t: t.object.tagged_date, reverse=True)
+        tag_objects = sorted(tag_objects, key=lambda t: t.object.tagged_date, reverse=True)
 
         final_list_of_tag_names = []
-        for tag_object in tags_commit_order:
-            if branch and shallow:
-                cur_branch = self.get_active_branch(raise_on_detached_head=False)
-                commit_obj = self._be.head.commit
-                if branch != "HEAD":
-                    commit_obj = self.get_commit_object_from_branch_name(branch)
-
-                # TODO:: add debug print here
-                if commit_obj.committed_date < tag_object.commit.committed_date:
-                    continue
-
-                cur_commit_tags = self.get_all_commit_tags(tag_object.commit.hexsha)
-                tag_commit_in_current_branch = True
-                for t in cur_commit_tags:
-                    _, verinfo = self.get_version_info_from_tag_name(t)
-                    if "stamping" in verinfo:
-                        if (
-                                cur_branch
-                                != verinfo["stamping"]["app"]["stamped_on_branch"]
-                        ):
-                            tag_commit_in_current_branch = False
-
-                if not tag_commit_in_current_branch:
-                    continue
-
-            for t in tags[tag_object.commit.hexsha]:
-                final_list_of_tag_names.append(t.name)
+        for tag_object in tag_objects:
+            final_list_of_tag_names.append(tag_object.name)
 
         return final_list_of_tag_names
 
@@ -527,12 +475,12 @@ class GitBackend(VMNBackend):
             LOGGER.debug("Exception info: ", exc_info=True)
             return None
 
-        '''
+
         # In case tag is not annotated
         # May hurt backward comp?
         if o.tag is None:
             return None
-        '''
+
 
         if o is None:
             LOGGER.debug(f"Somehow did not find a tag object for tag: {tname}")
@@ -743,21 +691,17 @@ class GitBackend(VMNBackend):
     ):
         if root:
             regex = VMN_ROOT_TAG_REGEX
+            f = f"{app_name}/.*:"
         else:
             regex = VMN_TAG_REGEX
+            f = f"{app_name}:"
 
-        tag_formated_app_name = VMNBackend.app_name_to_git_tag_app_name(app_name)
-        app_tags = self.tags(f"{tag_formated_app_name}_*", type)
+        app_tags = self.tags(f, type)
         cleaned_app_tag = None
         for tag in app_tags:
-            # skip buildmetadata versions
-            if "+" in tag:
-                continue
-
             match = re.search(regex, tag)
             if match is None:
-                LOGGER.error(f"Tag {tag} doesn't comply to vmn version format")
-                break
+                continue
 
             gdict = match.groupdict()
 

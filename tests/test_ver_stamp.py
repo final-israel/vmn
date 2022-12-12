@@ -1079,12 +1079,12 @@ def test_rc_stamping(app_layout, capfd):
     assert data["_version"] == "1.3.0"
     assert data["prerelease"] == "release"
 
-    tags_before = app_layout._app_backend.be.tags()
+    tags_before = app_layout.get_all_tags()
     for t in tags_before:
         app_layout._app_backend.be._be.delete_tag(t)
 
     app_layout._app_backend.be._be.git.fetch("--tags")
-    tags_after = app_layout._app_backend.be.tags()
+    tags_after = app_layout.get_all_tags()
 
     assert tags_before == tags_after
 

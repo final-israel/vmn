@@ -127,6 +127,16 @@ class FSAppLayoutFixture(object):
             cwd=self.repo_path,
         )
 
+    def get_all_tags(self):
+        cmd = ["--sort", "taggerdate"]
+        tags = self._app_backend._git_backend.git.tag(*cmd).split("\n")
+
+        tags = tags[::-1]
+        if len(tags) == 1 and tags[0] == "":
+            tags.pop(0)
+
+        return tags
+
     def create_tag(self, commit_hash, tag_name):
         import subprocess
 
