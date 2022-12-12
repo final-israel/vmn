@@ -423,7 +423,6 @@ class GitBackend(VMNBackend):
             "--decorate=short",
             cmd_suffix
         ]
-        shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
 
         tag_names = self._be.git.log(*cmd).split("\n")
         if len(tag_names) == 1 and tag_names[0] == "":
@@ -445,11 +444,25 @@ class GitBackend(VMNBackend):
             if o:
                 tag_objects.append(o)
 
-        tag_objects = sorted(tag_objects, key=lambda t: t.object.tagged_date, reverse=True)
+        tag_objects = sorted(tag_objects, key=lambda t: t.object.tagged_date)
 
         final_list_of_tag_names = []
         for tag_object in tag_objects:
             final_list_of_tag_names.append(tag_object.name)
+
+        idx_release = -1
+        idx_prerelease = -1
+        for i in range(len(final_list_of_tag_names)):
+            tagd = VMNBackend.deserialize_vmn_tag_name(
+                final_list_of_tag_names[i]
+            )
+            if tagd["prerelease"] and not tagd["buildmetadata"]:
+                idx_prerelease = i
+            if not tagd["prerelease"] and not tagd["buildmetadata"]:
+                idx_release = i
+
+        if idx_prerelease != -1 and idx_release != -1:
+            final_list_of_tag_names[idx_release], final_list_of_tag_names[idx_prerelease] = final_list_of_tag_names[idx_prerelease], final_list_of_tag_names[idx_release]
 
         return final_list_of_tag_names
 
@@ -475,12 +488,8 @@ class GitBackend(VMNBackend):
             LOGGER.debug("Exception info: ", exc_info=True)
             return None
 
-
-        # In case tag is not annotated
-        # May hurt backward comp?
         if o.tag is None:
             return None
-
 
         if o is None:
             LOGGER.debug(f"Somehow did not find a tag object for tag: {tname}")
@@ -691,10 +700,10 @@ class GitBackend(VMNBackend):
     ):
         if root:
             regex = VMN_ROOT_TAG_REGEX
-            f = f"{app_name}/.*:"
+            f = f"{app_name}/.*: Stamped"
         else:
             regex = VMN_TAG_REGEX
-            f = f"{app_name}:"
+            f = f"{app_name}: Stamped"
 
         app_tags = self.tags(f, type)
         cleaned_app_tag = None
