@@ -96,7 +96,8 @@ def resolve_root_path():
             exist = os.path.exists(os.path.join(root_path, ".vmn")) or os.path.exists(
                 os.path.join(root_path, ".git")
             )
-        except:
+        except Exception as exc:
+            LOGGER.debug(f"Logged exception: ", exc_info=True)
             root_path = None
             break
     if root_path is None:
@@ -356,7 +357,8 @@ class GitBackend(VMNBackend):
         try:
             self._be.git.execute(["git", "ls-files", "--error-unmatch", path])
             return True
-        except:
+        except Exception as exc:
+            LOGGER.debug(f"Logged exception: ", exc_info=True)
             return False
 
     def tag(self, tags, messages, ref="HEAD", push=False):
@@ -419,7 +421,8 @@ class GitBackend(VMNBackend):
         found_tag = self._be.tag(f"refs/tags/{tag}")
         try:
             return tuple(found_tag.commit.stats.files)
-        except:
+        except Exception as exc:
+            LOGGER.debug(f"Logged exception: ", exc_info=True)
             return None
 
     def tags(self, filter, type=RELATIVE_TO_GLOBAL_TYPE):
@@ -511,7 +514,19 @@ class GitBackend(VMNBackend):
         return tags
 
     def get_all_brother_tags(self, tag_name):
-        return self.get_all_commit_tags(self.changeset(tag=tag_name))
+        sha = self.changeset(tag=tag_name)
+        #if sha is None:
+        #    err = f"Failed to get changest for tag: {tag_name}"
+        #    LOGGER.error(err)
+        #    raise RuntimeError(err)
+
+        tags = self.get_all_commit_tags(sha)
+        #if not tags:
+            #    err = f"Failed to get changest for tag: {tag_name}"
+            #    LOGGER.error(err)
+            #    raise RuntimeError(err)
+
+        return tags
 
     def in_detached_head(self):
         return self._be.head.is_detached
@@ -658,7 +673,8 @@ class GitBackend(VMNBackend):
 
         try:
             return found_tag.commit.hexsha
-        except:
+        except Exception as exc:
+            LOGGER.debug(f"Logged exception: ", exc_info=True)
             return None
 
     def revert_local_changes(self, files=[]):
@@ -741,13 +757,15 @@ class GitBackend(VMNBackend):
     def get_version_info_from_tag_name(self, tag_name):
         try:
             commit_tag_obj = self._be.commit(tag_name)
-        except:
+        except Exception as exc:
+            LOGGER.debug(f"Logged exception: ", exc_info=True)
             # Backward compatability code for vmn 0.3.9:
             try:
                 _tag_name = f"{tag_name}.0"
                 commit_tag_obj = self._be.commit(_tag_name)
                 tag_name = _tag_name
-            except:
+            except Exception as exc:
+                LOGGER.debug(f"Logged exception: ", exc_info=True)
                 return tag_name, None
 
         if commit_tag_obj.author.name != VMN_USER_NAME:

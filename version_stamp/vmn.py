@@ -216,7 +216,8 @@ class IVersionsStamper(object):
         try:
             self.template = IVersionsStamper.parse_template(template)
             self.bad_format_template = False
-        except:
+        except Exception as exc:
+            LOGGER.debug("Logged exception: ", exc_info=True)
             self.template = IVersionsStamper.parse_template(
                 stamp_utils.VMN_DEFAULT_TEMPLATE
             )
@@ -1010,7 +1011,7 @@ class VersionControlStamper(IVersionsStamper):
         try:
             self.publish_commit(version_files_to_add)
         except Exception as exc:
-            LOGGER.debug("Logged Exception message:", exc_info=True)
+            LOGGER.debug("Logged Exception message: ", exc_info=True)
             LOGGER.info(f"Reverting vmn changes... ")
             if self.dry_run:
                 LOGGER.info(f"Would have tried to revert a vmn commit")
@@ -1534,7 +1535,8 @@ def handle_show(vmn_ctx):
 
     try:
         out = show(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
-    except:
+    except Exception as exc:
+        LOGGER.error("Logged Exception message:", exc_info=True)
         return 1
 
     return 0
@@ -1845,6 +1847,7 @@ def _init_app(versions_be_ifc, starting_version):
             starting_version, "release", {}, root_app_version
         )
     except Exception as exc:
+        LOGGER.debug("Logged Exception message: ", exc_info=True)
         versions_be_ifc.backend.revert_local_changes(versions_be_ifc.version_files)
         err = -1
 
@@ -1970,7 +1973,8 @@ def show(vcs, params, verstr=None):
             try:
                 with open(path, "r") as f:
                     ver_info = yaml.safe_load(f)
-            except:
+            except Exception as exc:
+                LOGGER.error("Logged Exception message:", exc_info=True)
                 ver_info = None
     else:
         expected_status = {"repo_tracked", "app_tracked"}
@@ -2212,6 +2216,7 @@ def get_dirty_states(optional_status, status):
         if debug_msg:
             LOGGER.debug(f"Debug for dirty states call:\n{debug_msg}")
     except Exception as exc:
+        LOGGER.debug("Logged Exception message: ", exc_info=True)
         pass
 
     return dirty_states
@@ -2316,8 +2321,8 @@ def _retrieve_version_info(vcs, verstr):
         try:
             stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_name)
             tag_name, ver_info = vcs.backend.get_version_info_from_tag_name(tag_name)
-        except:
-            LOGGER.error(f"Wrong version specified: {verstr}")
+        except Exception as exc:
+            LOGGER.error(f"Wrong version specified: {verstr}", exc_info=True)
 
             return None, None
 

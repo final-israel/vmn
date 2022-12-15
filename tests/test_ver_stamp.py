@@ -460,6 +460,9 @@ def test_basic_show(app_layout, capfd):
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
+    err = _show(app_layout.app_name)
+    assert err == 0
+
     app_layout.write_file_commit_and_push(
         "test_repo_0", "f1.file", "msg1", commit=False
     )
