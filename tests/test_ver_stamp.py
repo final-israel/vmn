@@ -2153,3 +2153,9 @@ def test_perf_show(app_layout):
     diff = t2 - t1
 
     assert diff < 2
+
+
+def test_run_vmn_from_non_git_repo(app_layout):
+    _run_vmn_init()
+    with vmn.VMNContextMAnager([]) as vmn_ctx:
+        pass
