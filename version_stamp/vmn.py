@@ -895,7 +895,7 @@ class VersionControlStamper(IVersionsStamper):
         if self.root_app_name is None:
             return None
 
-        ver_info = self.backend.get_first_reachable_version_info(
+        _, ver_info = self.backend.get_first_reachable_version_info(
             self.root_app_name,
             root=True,
             type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
@@ -1354,7 +1354,7 @@ def initialize_backend_attrs(vmn_ctx):
     vcs.current_version_info["stamping"]["app"]["changesets"] = copy.deepcopy(
         vcs.actual_deps_state
     )
-    vcs.ver_info_from_repo = vcs.backend.get_first_reachable_version_info(
+    _, vcs.ver_info_from_repo = vcs.backend.get_first_reachable_version_info(
         vcs.name,
         vcs.root_context,
         type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
@@ -1445,7 +1445,7 @@ def handle_release(vmn_ctx):
         return 1
 
     try:
-        tag_name, ver_info = _retrieve_version_info(vmn_ctx.vcs, ver)
+        tag_name, ver_info = _get_version_info_from_verstr(vmn_ctx.vcs, ver)
         LOGGER.info(vmn_ctx.vcs.release_app_version(tag_name, ver_info))
     except Exception as exc:
         LOGGER.error(f"Failed to release {ver}")
@@ -1501,7 +1501,7 @@ def handle_add(vmn_ctx):
         return 1
 
     try:
-        tag_name, ver_info = _retrieve_version_info(vmn_ctx.vcs, ver)
+        tag_name, ver_info = _get_version_info_from_verstr(vmn_ctx.vcs, ver)
         LOGGER.info(vmn_ctx.vcs.add_metadata_to_version(tag_name, ver_info))
     except Exception as exc:
         LOGGER.debug("Logged Exception message:", exc_info=True)
@@ -1821,7 +1821,7 @@ def _init_app(versions_be_ifc, starting_version):
     root_app_version = 0
     services = {}
     if versions_be_ifc.root_app_name is not None:
-        ver_info = versions_be_ifc.backend.get_first_reachable_version_info(
+        _, ver_info = versions_be_ifc.backend.get_first_reachable_version_info(
             versions_be_ifc.root_app_name,
             root=True,
             type=stamp_utils.RELATIVE_TO_GLOBAL_TYPE,
@@ -1961,7 +1961,7 @@ def show(vcs, params, verstr=None):
     if params["from_file"]:
         if verstr is None:
             be = stamp_utils.LocalFileBackend(vcs.vmn_root_path)
-            ver_info = be.get_first_reachable_version_info(vcs.name, vcs.root_context)
+            _, ver_info = be.get_first_reachable_version_info(vcs.name, vcs.root_context)
         else:
             if vcs.root_context:
                 dir_path = os.path.join(vcs.root_app_dir_path, "root_verinfo")
@@ -1993,14 +1993,13 @@ def show(vcs, params, verstr=None):
             raise RuntimeError()
 
         if verstr is None:
-            ver_info = vcs.backend.get_first_reachable_version_info(
+            tag_name, ver_info = vcs.backend.get_first_reachable_version_info(
                 vcs.name,
                 vcs.root_context,
                 stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
             )
-            tag_name = get_tag_name(vcs, verstr)
         else:
-            tag_name, ver_info = _retrieve_version_info(vcs, verstr)
+            tag_name, ver_info = _get_version_info_from_verstr(vcs, verstr)
 
         if ver_info is not None:
             dirty_states = get_dirty_states(optional_status, status)
@@ -2113,13 +2112,13 @@ def gen(vcs, params, verstr=None):
         raise RuntimeError()
 
     if verstr is None:
-        ver_info = vcs.backend.get_first_reachable_version_info(
+        _, ver_info = vcs.backend.get_first_reachable_version_info(
             vcs.name,
             vcs.root_context,
             stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
         )
     else:
-        _, ver_info = _retrieve_version_info(vcs, verstr)
+        _, ver_info = _get_version_info_from_verstr(vcs, verstr)
 
     if ver_info is None:
         LOGGER.error("Version information was not found " "for {0}.".format(vcs.name))
@@ -2232,15 +2231,12 @@ def goto_version(vcs, params, version):
             version, unique_id = res
             check_unique = True
 
-    ver_info = None
-    tag_name = None
     if version is None:
-        ver_info = vcs.backend.get_first_reachable_version_info(
+        tag_name, ver_info = vcs.backend.get_first_reachable_version_info(
             vcs.name, vcs.root_context, stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
         )
-        tag_name = get_tag_name(vcs, version)
     else:
-        tag_name, ver_info = _retrieve_version_info(vcs, version)
+        tag_name, ver_info = _get_version_info_from_verstr(vcs, version)
 
     if ver_info is None:
         LOGGER.error(f"No such app: {vcs.name}")
@@ -2306,7 +2302,7 @@ def goto_version(vcs, params, version):
     return 0
 
 
-def _retrieve_version_info(vcs, verstr):
+def _get_version_info_from_verstr(vcs, verstr):
     tag_name = get_tag_name(vcs, verstr)
 
     if vcs.root_context:
@@ -2334,8 +2330,9 @@ def _retrieve_version_info(vcs, verstr):
 
 def get_tag_name(vcs, verstr):
     tag_name = f'{vcs.name.replace("/", "-")}'
-    if verstr is not None:
-        tag_name = f"{tag_name}_{verstr}"
+    assert verstr is not None
+    tag_name = f"{tag_name}_{verstr}"
+
     return tag_name
 
 

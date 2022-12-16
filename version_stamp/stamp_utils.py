@@ -312,21 +312,21 @@ class LocalFileBackend(VMNBackend):
             dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
             list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
             if not list_of_files:
-                return None
+                return None, None
 
             latest_file = max(list_of_files, key=os.path.getctime)
             with open(latest_file, "r") as f:
-                return yaml.safe_load(f)
+                return None, yaml.safe_load(f)
 
         dir_path = os.path.join(self.repo_path, ".vmn", app_name, "verinfo")
         list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
         if not list_of_files:
-            return None
+            return None, None
 
         latest_file = max(list_of_files, key=os.path.getctime)
 
         with open(latest_file, "r") as f:
-            return yaml.safe_load(f)
+            return None, yaml.safe_load(f)
 
 
 class GitBackend(VMNBackend):
@@ -504,7 +504,10 @@ class GitBackend(VMNBackend):
 
         return o
 
-    def get_all_commit_tags(self, hexsha):
+    def get_all_commit_tags(self, hexsha="HEAD"):
+        if hexsha is None:
+            hexsha = "HEAD"
+
         cmd = ["--points-at", hexsha]
         tags = self._be.git.tag(*cmd).split("\n")
 
@@ -748,11 +751,9 @@ class GitBackend(VMNBackend):
             break
 
         if cleaned_app_tag is None:
-            return None
+            return None, None
 
-        _, verinfo = self.get_version_info_from_tag_name(cleaned_app_tag)
-
-        return verinfo
+        return self.get_version_info_from_tag_name(cleaned_app_tag)
 
     def get_version_info_from_tag_name(self, tag_name):
         try:
