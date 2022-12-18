@@ -594,7 +594,11 @@ class GitBackend(VMNBackend):
             sha = self.changeset(tag=tag_name)
             tags = self.get_all_commit_tags(sha)
         except Exception as exc:
-            LOGGER.debug("Logged exception: ", exc_info=True)
+            LOGGER.debug(
+                f"Failed to get brother tags for tag: {tag_name}. "
+                f" Logged exception: ",
+                exc_info=True
+            )
             return []
 
         return tags
