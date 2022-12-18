@@ -596,7 +596,7 @@ class GitBackend(VMNBackend):
         except Exception as exc:
             LOGGER.debug(
                 f"Failed to get brother tags for tag: {tag_name}. "
-                f" Logged exception: ",
+                f"Logged exception: ",
                 exc_info=True
             )
             return []
