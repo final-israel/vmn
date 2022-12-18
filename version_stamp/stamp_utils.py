@@ -118,7 +118,7 @@ class LevelFilter(logging.Filter):
         return False
 
 
-def init_stamp_logger(rotating_log_path, debug=False):
+def init_stamp_logger(rotating_log_path=None, debug=False):
     global LOGGER
 
     LOGGER = logging.getLogger(VMN_USER_NAME)
@@ -150,6 +150,9 @@ def init_stamp_logger(rotating_log_path, debug=False):
     stderr_handler.setLevel(logging.WARNING)
     LOGGER.addHandler(stderr_handler)
 
+    if rotating_log_path is None:
+        return LOGGER
+
     rotating_file_handler = RotatingFileHandler(
         rotating_log_path,
         maxBytes=1024 * 10,
@@ -159,7 +162,7 @@ def init_stamp_logger(rotating_log_path, debug=False):
 
     bold_char = "\033[1m"
     end_char = "\033[0m"
-    fmt = f"{bold_char}%(asctime)s - [%(levelname)s]{end_char} %(message)s"
+    fmt = f"{bold_char}%(filename)s:%(lineno)d => %(asctime)s{end_char} - [%(levelname)s] %(message)s"
     formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
     rotating_file_handler.setFormatter(formatter)
     LOGGER.addHandler(rotating_file_handler)
@@ -425,7 +428,12 @@ class GitBackend(VMNBackend):
             LOGGER.debug(f"Logged exception: ", exc_info=True)
             return None
 
-    def tags(self, filter, type=RELATIVE_TO_GLOBAL_TYPE):
+    def get_all_latest_stamp_tags(self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE):
+        if root_context:
+            msg_filter = f"{app_name}/.*: Stamped"
+        else:
+            msg_filter = f"{app_name}: Stamped"
+
         if type == RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE:
             cmd_suffix = (
                 f"refs/heads/{self.get_active_branch(raise_on_detached_head=False)}"
@@ -436,7 +444,7 @@ class GitBackend(VMNBackend):
             cmd_suffix = f"--branches"
 
         cmd = [
-            f"--grep={filter}",
+            f"--grep={msg_filter}",
             f"-1",
             f"--author={VMN_USER_NAME}",
             "--pretty=%H,,,%D",
@@ -444,12 +452,68 @@ class GitBackend(VMNBackend):
             cmd_suffix,
         ]
 
+        LOGGER.debug(f"Going to run: git log {' '.join(cmd)}")
+
         tag_names = self._be.git.log(*cmd).split("\n")
         if len(tag_names) == 1 and tag_names[0] == "":
             tag_names.pop(0)
 
+        shallow = os.path.exists(
+            os.path.join(self._be.common_dir, "shallow")
+        )
         if not tag_names:
-            return tag_names
+            if not shallow:
+                return tag_names
+
+            tag_name_prefix = \
+                VMNBackend.app_name_to_git_tag_app_name(
+                    app_name
+                )
+            cmd = ["--sort", "taggerdate",  "--list", f"{tag_name_prefix}_*"]
+            tag_names = self._be.git.tag(*cmd).split("\n")
+
+            if len(tag_names) == 1 and tag_names[0] == "":
+                tag_names.pop(0)
+
+            if not tag_names:
+                return tag_names
+
+            latest_tag = tag_names[-1]
+            head_date = self._be.head.commit.committed_date
+            for tname in reversed(tag_names):
+                o = self.get_tag_object_from_tag_name(tname)
+                if o:
+                    if head_date < o.object.tagged_date:
+                        continue
+
+                    latest_tag = tname
+                    break
+
+            try:
+                found_tag = self._be.tag(f"refs/tags/{latest_tag}")
+            except Exception as exc:
+                LOGGER.error(
+                    f"Failed to get tag object from tag name: {latest_tag}"
+                )
+                return []
+
+            head_tags = self.get_all_commit_tags(found_tag.commit.hexsha)
+            tag_objects = []
+
+            for tname in head_tags:
+                o = self.get_tag_object_from_tag_name(tname)
+                if o:
+                    tag_objects.append(o)
+
+            # We want the newest tag on top because we skip "buildmetadata tags"
+            # TODO:: solve the weird coupling between here and get_first_reachable_version_info
+            tag_objects = sorted(tag_objects, key=lambda t: t.object.tagged_date, reverse=True)
+
+            final_list_of_tag_names = []
+            for tag_object in tag_objects:
+                final_list_of_tag_names.append(tag_object.name)
+
+            return final_list_of_tag_names
 
         items = tag_names[0].split(",,,")
         tag_names[0].split(",,,")[1].split(",")
@@ -473,6 +537,15 @@ class GitBackend(VMNBackend):
             final_list_of_tag_names.append(tag_object.name)
 
         return final_list_of_tag_names
+
+    def get_latest_available_tag(self, tag_prefix_filter):
+        cmd = ["--sort", "taggerdate", "--list", tag_prefix_filter]
+        tag_names = self._be.git.tag(*cmd).split("\n")
+
+        if len(tag_names) == 1 and tag_names[0] == "":
+            return None
+
+        return tag_names[-1]
 
     def get_commit_object_from_branch_name(self, bname):
         # TODO:: Unfortunately, need to spend o(N) here
@@ -722,17 +795,16 @@ class GitBackend(VMNBackend):
             LOGGER.debug("Exception info: ", exc_info=True)
 
     def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+        self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
-        if root:
+        app_tags = self.get_all_latest_stamp_tags(app_name, root_context, type)
+        cleaned_app_tag = None
+
+        if root_context:
             regex = VMN_ROOT_TAG_REGEX
-            f = f"{app_name}/.*: Stamped"
         else:
             regex = VMN_TAG_REGEX
-            f = f"{app_name}: Stamped"
 
-        app_tags = self.tags(f, type)
-        cleaned_app_tag = None
         for tag in app_tags:
             # skip buildmetadata versions
             if "+" in tag:
