@@ -590,17 +590,12 @@ class GitBackend(VMNBackend):
         return tags
 
     def get_all_brother_tags(self, tag_name):
-        sha = self.changeset(tag=tag_name)
-        #if sha is None:
-        #    err = f"Failed to get changest for tag: {tag_name}"
-        #    LOGGER.error(err)
-        #    raise RuntimeError(err)
-
-        tags = self.get_all_commit_tags(sha)
-        #if not tags:
-            #    err = f"Failed to get changest for tag: {tag_name}"
-            #    LOGGER.error(err)
-            #    raise RuntimeError(err)
+        try:
+            sha = self.changeset(tag=tag_name)
+            tags = self.get_all_commit_tags(sha)
+        except Exception as exc:
+            LOGGER.debug("Logged exception: ", exc_info=True)
+            return []
 
         return tags
 
