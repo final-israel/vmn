@@ -191,8 +191,7 @@ class VMNBackend(object):
     def gen_unique_id(verstr, hash):
         return f"{verstr}+{hash}"
 
-    @staticmethod
-    def deserialize_vmn_tag_name(vmn_tag):
+    def deserialize_tag_name(self, some_tag):
         ret = {
             "app_name": None,
             "type": "version",
@@ -204,22 +203,31 @@ class VMNBackend(object):
             "hotfix": None,
             "prerelease": None,
             "buildmetadata": None,
+            "tag_msg": None
         }
 
-        match = re.search(VMN_ROOT_TAG_REGEX, vmn_tag)
+        match = re.search(VMN_ROOT_TAG_REGEX, some_tag)
         if match is not None:
             gdict = match.groupdict()
-            if gdict["version"] is not None:
-                int(gdict["version"])
-                ret["root_version"] = gdict["version"]
-                ret["app_name"] = gdict["app_name"]
-                ret["type"] = "root"
+            assert gdict["version"] is not None
+
+            int(gdict["version"])
+            ret["root_version"] = gdict["version"]
+            ret["app_name"] = gdict["app_name"]
+            ret["type"] = "root"
+
+            ret["tag_msg"] = yaml.safe_load(
+                self._be.tag(f"refs/tags/{some_tag}").object.message
+            )
+            if "vmn_info" not in ret["tag_msg"]:
+                raise RuntimeError(
+                    f"vmn_info key was not found in tag {some_tag}"
+                )
 
             return ret
 
-        match = re.search(VMN_TAG_REGEX, vmn_tag)
+        match = re.search(VMN_TAG_REGEX, some_tag)
         if match is None:
-            LOGGER.error(f"Tag {vmn_tag} doesn't comply to vmn version format")
             raise RuntimeError()
 
         gdict = match.groupdict()
@@ -229,6 +237,14 @@ class VMNBackend(object):
         ret["minor"] = gdict["minor"]
         ret["patch"] = gdict["patch"]
         ret["hotfix"] = "0"
+
+        ret["tag_msg"] = yaml.safe_load(
+            self._be.tag(f"refs/tags/{some_tag}").object.message
+        )
+        if "vmn_info" not in ret["tag_msg"]:
+            raise RuntimeError(
+                f"vmn_info key was not found in tag {some_tag}"
+            )
 
         if gdict["hotfix"] is not None:
             ret["hotfix"] = gdict["hotfix"]
@@ -246,6 +262,17 @@ class VMNBackend(object):
             ret["type"] = "buildmetadata"
 
         return ret
+
+    def deserialize_vmn_tag_name(self, vmn_tag):
+        try:
+            return self.deserialize_tag_name(vmn_tag)
+        except Exception as exc:
+            LOGGER.error(
+                f"Tag {vmn_tag} doesn't comply to vmn version format",
+                exc_info=True,
+            )
+
+            raise exc
 
     @staticmethod
     def get_utemplate_formatted_version(raw_vmn_version, template, hide_zero_hotfix):
@@ -585,7 +612,23 @@ class GitBackend(VMNBackend):
         if len(tags) == 1 and tags[0] == "":
             tags.pop(0)
 
-        return tags
+        final_tags = []
+        for t in tags:
+            try:
+                tagd = None
+                tagd = self.deserialize_tag_name(t)
+                final_tags.append(t)
+            except Exception as exc:
+                if tagd is None:
+                    tagd = {"tag_msg": None}
+
+                LOGGER.debug(
+                    f"Probably non-vmn tag - {t} with tag msg: {tagd['tag_msg']} ",
+                    exc_info=True
+                )
+                continue
+
+        return final_tags
 
     def get_all_brother_tags(self, tag_name):
         try:
@@ -598,6 +641,8 @@ class GitBackend(VMNBackend):
                 exc_info=True
             )
             return []
+
+        #final_tag_list
 
         return tags
 
@@ -879,7 +924,7 @@ class GitBackend(VMNBackend):
 
         tags = self.get_all_brother_tags(tag_name)
         for tag in tags:
-            tagd = VMNBackend.deserialize_vmn_tag_name(tag)
+            tagd = self.deserialize_vmn_tag_name(tag)
             tagd.update({"tag": tag})
             tagd["message"] = self._be.tag(f"refs/tags/{tag}").object.message
 
