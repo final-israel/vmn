@@ -462,24 +462,33 @@ class GitBackend(VMNBackend):
         else:
             cmd_suffix = f"--branches"
 
-        cmd = [
-            f"--grep={msg_filter}",
-            f"-1",
-            f"--author={VMN_USER_NAME}",
-            "--pretty=%H,,,%D",
-            "--decorate=short",
-            cmd_suffix,
-        ]
-
-        LOGGER.debug(f"Going to run: git log {' '.join(cmd)}")
-
-        tag_names = self._be.git.log(*cmd).split("\n")
-        if len(tag_names) == 1 and tag_names[0] == "":
-            tag_names.pop(0)
+        tag_names = self._get_reachable_vmn_commit(cmd_suffix, msg_filter)
 
         shallow = os.path.exists(
             os.path.join(self._be.common_dir, "shallow")
         )
+
+        if tag_names:
+            items = tag_names[0].split(",,,")
+            tag_names[0].split(",,,")[1].split(",")
+
+            while tag_names:
+                _tag_names = []
+                for t in items[1].split(","):
+                    if "tag:" not in t:
+                        continue
+
+                    _tag_names.append(t)
+
+                if _tag_names:
+                    break
+
+                if cmd_suffix == "HEAD":
+                    cmd_suffix = f"{items[0]}~1"
+                    tag_names = self._get_reachable_vmn_commit(cmd_suffix, msg_filter)
+                else:
+                    tag_names = []
+
         if not tag_names:
             if not shallow:
                 return tag_names
@@ -539,10 +548,11 @@ class GitBackend(VMNBackend):
 
         tag_objects = []
         for t in items[1].split(","):
-            if not "tag:" in t:
+            if "tag:" not in t:
                 continue
 
             tname = t.split("tag:")[1].strip()
+            # TODO:: add call desearilize here
             o = self.get_tag_object_from_tag_name(tname)
             if o:
                 tag_objects.append(o)
@@ -556,6 +566,23 @@ class GitBackend(VMNBackend):
             final_list_of_tag_names.append(tag_object.name)
 
         return final_list_of_tag_names
+
+    def _get_reachable_vmn_commit(self, cmd_suffix, msg_filter):
+        cmd = [
+            f"--grep={msg_filter}",
+            f"-1",
+            f"--author={VMN_USER_NAME}",
+            "--pretty=%H,,,%D",
+            "--decorate=short",
+            cmd_suffix,
+        ]
+        LOGGER.debug(f"Going to run: git log {' '.join(cmd)}")
+        tag_names = self._be.git.log(*cmd).split("\n")
+
+        if len(tag_names) == 1 and tag_names[0] == "":
+            tag_names.pop(0)
+
+        return tag_names
 
     def get_latest_available_tag(self, tag_prefix_filter):
         cmd = ["--sort", "taggerdate", "--list", tag_prefix_filter]
@@ -638,8 +665,6 @@ class GitBackend(VMNBackend):
                 exc_info=True
             )
             return []
-
-        #final_tag_list
 
         return tags
 

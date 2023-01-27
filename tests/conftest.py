@@ -149,6 +149,25 @@ class FSAppLayoutFixture(object):
         LOGGER.info(f"going to run: {' '.join(base_cmd)}")
         subprocess.call(base_cmd, cwd=self.repo_path)
 
+    def remove_tag(self, tag_name):
+        import subprocess
+
+        base_cmd = ["git", "tag", "-d", tag_name]
+
+        LOGGER.info(f"going to run: {' '.join(base_cmd)}")
+        subprocess.call(base_cmd, cwd=self.repo_path)
+
+        base_cmd = [
+            "git",
+            "push",
+            "--delete",
+            self._app_backend.be._origin.name,
+            tag_name
+        ]
+
+        LOGGER.info(f"going to run: {' '.join(base_cmd)}")
+        subprocess.call(base_cmd, cwd=self.repo_path)
+
     def stamp_with_previous_vmn(self):
         import subprocess
 

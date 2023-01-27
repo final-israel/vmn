@@ -2186,3 +2186,45 @@ def test_bad_tag(app_layout, capfd):
     captured = capfd.readouterr()
 
     assert err == 0
+
+
+def test_stamp_with_removed_tags_no_commit(app_layout, capfd):
+    res = _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(f"{app_layout.app_name}", "patch")
+
+    app_layout.remove_tag(f"{app_layout.app_name}_0.0.1")
+
+    ret, ver_info, _ =_stamp_app(f"{app_layout.app_name}", "patch")
+    assert ret == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
+
+
+def test_stamp_with_removed_tags_with_commit(app_layout, capfd):
+    res = _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(f"{app_layout.app_name}", "patch")
+    app_layout.write_file_commit_and_push("test_repo_0", "a/b/c/f1.file", "msg1")
+
+    app_layout.remove_tag(f"{app_layout.app_name}_0.0.1")
+
+    ret, ver_info, _ =_stamp_app(f"{app_layout.app_name}", "patch")
+    assert ret == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
+
+
+def test_show_removed_tags(app_layout, capfd):
+    res = _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(f"{app_layout.app_name}", "patch")
+    app_layout.write_file_commit_and_push("test_repo_0", "a/b/c/f1.file", "msg1")
+
+    app_layout.remove_tag(f"{app_layout.app_name}_0.0.1")
+
+    capfd.readouterr()
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    assert "0.0.0\n" == captured.out
