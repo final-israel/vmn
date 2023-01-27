@@ -159,7 +159,7 @@ def init_stamp_logger(rotating_log_path=None, debug=False):
 
     rotating_file_handler = RotatingFileHandler(
         rotating_log_path,
-        maxBytes=1024 * 10,
+        maxBytes=1024 * 1024 * 10,
         backupCount=1,
     )
     rotating_file_handler.setLevel(logging.DEBUG)
