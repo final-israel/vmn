@@ -462,97 +462,89 @@ class GitBackend(VMNBackend):
         else:
             cmd_suffix = f"--branches"
 
-        tag_names = self._get_reachable_vmn_commit(cmd_suffix, msg_filter)
-
         shallow = os.path.exists(
             os.path.join(self._be.common_dir, "shallow")
         )
 
-        if tag_names:
-            items = tag_names[0].split(",,,")
-            tag_names[0].split(",,,")[1].split(",")
+        if not shallow:
+            tag_names = self._get_reachable_vmn_commit(cmd_suffix, msg_filter)
+        else:
+            tag_names = self._get_shallow_reachable_vmn_commit(app_name)
 
-            while tag_names:
-                _tag_names = []
-                for t in items[1].split(","):
-                    if "tag:" not in t:
-                        continue
+        return tag_names
 
-                    _tag_names.append(t)
+    def _get_reachable_vmn_commit(self, cmd_suffix, msg_filter):
+        tag_objects = []
+        res = self._get_top_vmn_commit(cmd_suffix, msg_filter)
+        while res:
+            items = res[0].split(",,,")
+            _tag_objects = []
+            for t in items[1].split(","):
+                if "tag:" not in t:
+                    continue
 
-                if _tag_names:
-                    break
+                tname = t.split("tag:")[1].strip()
+                # TODO:: add call desearilize here
+                o = self.get_tag_object_from_tag_name(tname)
+                if o:
+                    _tag_objects.append(o)
 
-                if cmd_suffix == "HEAD":
-                    cmd_suffix = f"{items[0]}~1"
-                    tag_names = self._get_reachable_vmn_commit(cmd_suffix, msg_filter)
-                else:
-                    tag_names = []
+            if _tag_objects:
+                tag_objects = _tag_objects
+                break
+
+            if cmd_suffix == "HEAD":
+                cmd_suffix = f"{items[0]}~1"
+                res = self._get_top_vmn_commit(cmd_suffix, msg_filter)
+            else:
+                res = []
+
+        # We want the newest tag on top because we skip "buildmetadata tags"
+        # TODO:: solve the weird coupling between here and get_first_reachable_version_info
+        tag_objects = sorted(tag_objects, key=lambda t: t.object.tagged_date, reverse=True)
+        tag_names = []
+        for tag_object in tag_objects:
+            tag_names.append(tag_object.name)
+
+        return tag_names
+
+    def _get_shallow_reachable_vmn_commit(self, app_name):
+        tag_name_prefix = \
+            VMNBackend.app_name_to_git_tag_app_name(
+                app_name
+            )
+        cmd = ["--sort", "taggerdate", "--list", f"{tag_name_prefix}_*"]
+        tag_names = self._be.git.tag(*cmd).split("\n")
+
+        if len(tag_names) == 1 and tag_names[0] == "":
+            tag_names.pop(0)
 
         if not tag_names:
-            if not shallow:
-                return tag_names
+            return tag_names
 
-            tag_name_prefix = \
-                VMNBackend.app_name_to_git_tag_app_name(
-                    app_name
-                )
-            cmd = ["--sort", "taggerdate",  "--list", f"{tag_name_prefix}_*"]
-            tag_names = self._be.git.tag(*cmd).split("\n")
+        latest_tag = tag_names[-1]
+        head_date = self._be.head.commit.committed_date
+        for tname in reversed(tag_names):
+            o = self.get_tag_object_from_tag_name(tname)
+            if o:
+                if self._be.head.commit.hexsha != o.commit.hexsha and head_date < o.object.tagged_date:
+                    continue
 
-            if len(tag_names) == 1 and tag_names[0] == "":
-                tag_names.pop(0)
+                latest_tag = tname
+                break
 
-            if not tag_names:
-                return tag_names
+        try:
+            found_tag = self._be.tag(f"refs/tags/{latest_tag}")
+        except Exception as exc:
+            LOGGER.error(
+                f"Failed to get tag object from tag name: {latest_tag}"
+            )
+            return []
 
-            latest_tag = tag_names[-1]
-            head_date = self._be.head.commit.committed_date
-            for tname in reversed(tag_names):
-                o = self.get_tag_object_from_tag_name(tname)
-                if o:
-                    if head_date < o.object.tagged_date:
-                        continue
-
-                    latest_tag = tname
-                    break
-
-            try:
-                found_tag = self._be.tag(f"refs/tags/{latest_tag}")
-            except Exception as exc:
-                LOGGER.error(
-                    f"Failed to get tag object from tag name: {latest_tag}"
-                )
-                return []
-
-            head_tags = self.get_all_commit_tags(found_tag.commit.hexsha)
-            tag_objects = []
-
-            for tname in head_tags:
-                o = self.get_tag_object_from_tag_name(tname)
-                if o:
-                    tag_objects.append(o)
-
-            # We want the newest tag on top because we skip "buildmetadata tags"
-            # TODO:: solve the weird coupling between here and get_first_reachable_version_info
-            tag_objects = sorted(tag_objects, key=lambda t: t.object.tagged_date, reverse=True)
-
-            final_list_of_tag_names = []
-            for tag_object in tag_objects:
-                final_list_of_tag_names.append(tag_object.name)
-
-            return final_list_of_tag_names
-
-        items = tag_names[0].split(",,,")
-        tag_names[0].split(",,,")[1].split(",")
-
+        head_tags = self.get_all_commit_tags(found_tag.commit.hexsha)
         tag_objects = []
-        for t in items[1].split(","):
-            if "tag:" not in t:
-                continue
 
-            tname = t.split("tag:")[1].strip()
-            # TODO:: add call desearilize here
+        for tname in head_tags:
             o = self.get_tag_object_from_tag_name(tname)
             if o:
                 tag_objects.append(o)
@@ -567,7 +559,7 @@ class GitBackend(VMNBackend):
 
         return final_list_of_tag_names
 
-    def _get_reachable_vmn_commit(self, cmd_suffix, msg_filter):
+    def _get_top_vmn_commit(self, cmd_suffix, msg_filter):
         cmd = [
             f"--grep={msg_filter}",
             f"-1",
@@ -577,12 +569,10 @@ class GitBackend(VMNBackend):
             cmd_suffix,
         ]
         LOGGER.debug(f"Going to run: git log {' '.join(cmd)}")
-        tag_names = self._be.git.log(*cmd).split("\n")
-
-        if len(tag_names) == 1 and tag_names[0] == "":
-            tag_names.pop(0)
-
-        return tag_names
+        res = self._be.git.log(*cmd).split("\n")
+        if len(res) == 1 and res[0] == "":
+            res.pop(0)
+        return res
 
     def get_latest_available_tag(self, tag_prefix_filter):
         cmd = ["--sort", "taggerdate", "--list", tag_prefix_filter]

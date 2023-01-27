@@ -2227,4 +2227,20 @@ def test_show_removed_tags(app_layout, capfd):
     assert err == 0
 
     captured = capfd.readouterr()
-    assert "0.0.0\n" == captured.out
+    assert "dirty:\n- modified\nout: 0.0.0\n\n" == captured.out
+
+
+def test_shallow_removed_vmn_tag_repo_stamp(app_layout):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
+
+    app_layout.remove_tag(f"{app_layout.app_name}_0.0.1")
+
+    clone_path = app_layout.create_new_clone("test_repo_0", depth=1)
+    app_layout.set_working_dir(clone_path)
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
