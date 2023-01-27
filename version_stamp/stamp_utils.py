@@ -447,7 +447,7 @@ class GitBackend(VMNBackend):
             LOGGER.debug(f"Logged exception: ", exc_info=True)
             return None
 
-    def get_all_latest_stamp_tags(self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE):
+    def get_latest_stamp_tags(self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE):
         if root_context:
             msg_filter = f"^{app_name}/.*: Stamped"
         else:
@@ -465,15 +465,14 @@ class GitBackend(VMNBackend):
         shallow = os.path.exists(
             os.path.join(self._be.common_dir, "shallow")
         )
-
-        if not shallow:
-            tag_names = self._get_reachable_vmn_commit(cmd_suffix, msg_filter)
+        if shallow:
+            tag_names = self._get_shallow_first_reachable_vmn_stamp_tag_list(app_name)
         else:
-            tag_names = self._get_shallow_reachable_vmn_commit(app_name)
+            tag_names = self._get_first_reachable_vmn_stamp_tag_list(cmd_suffix, msg_filter)
 
         return tag_names
 
-    def _get_reachable_vmn_commit(self, cmd_suffix, msg_filter):
+    def _get_first_reachable_vmn_stamp_tag_list(self, cmd_suffix, msg_filter):
         tag_objects = []
         res = self._get_top_vmn_commit(cmd_suffix, msg_filter)
         while res:
@@ -508,7 +507,7 @@ class GitBackend(VMNBackend):
 
         return tag_names
 
-    def _get_shallow_reachable_vmn_commit(self, app_name):
+    def _get_shallow_first_reachable_vmn_stamp_tag_list(self, app_name):
         tag_name_prefix = \
             VMNBackend.app_name_to_git_tag_app_name(
                 app_name
@@ -862,7 +861,7 @@ class GitBackend(VMNBackend):
     def get_first_reachable_version_info(
         self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
-        app_tags = self.get_all_latest_stamp_tags(app_name, root_context, type)
+        app_tags = self.get_latest_stamp_tags(app_name, root_context, type)
         cleaned_app_tag = None
 
         if root_context:

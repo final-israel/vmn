@@ -2189,7 +2189,7 @@ def test_bad_tag(app_layout, capfd):
 
 
 def test_stamp_with_removed_tags_no_commit(app_layout, capfd):
-    res = _run_vmn_init()
+    _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(f"{app_layout.app_name}", "patch")
 
@@ -2201,7 +2201,7 @@ def test_stamp_with_removed_tags_no_commit(app_layout, capfd):
 
 
 def test_stamp_with_removed_tags_with_commit(app_layout, capfd):
-    res = _run_vmn_init()
+    _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(f"{app_layout.app_name}", "patch")
     app_layout.write_file_commit_and_push("test_repo_0", "a/b/c/f1.file", "msg1")
@@ -2214,7 +2214,7 @@ def test_stamp_with_removed_tags_with_commit(app_layout, capfd):
 
 
 def test_show_removed_tags(app_layout, capfd):
-    res = _run_vmn_init()
+    _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(f"{app_layout.app_name}", "patch")
     app_layout.write_file_commit_and_push("test_repo_0", "a/b/c/f1.file", "msg1")
@@ -2244,3 +2244,33 @@ def test_shallow_removed_vmn_tag_repo_stamp(app_layout):
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
+
+
+@pytest.mark.parametrize("manual_version", [("0.0.0", "0.0.1"), ("2.0.0", "2.0.1")])
+def test_removed_vmn_tag_and_version_file_repo_stamp(app_layout, manual_version):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, ver_info, params = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
+
+    app_layout.remove_tag(f"{app_layout.app_name}_0.0.1")
+
+    file_path = params["version_file_path"]
+
+    app_layout.remove_file(file_path)
+    verfile_manual_content = {
+        "version_to_stamp_from": manual_version[0],
+        "prerelease": "release",
+        "prerelease_count": {},
+    }
+    # now we want to override the version by changing the file version:
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        ".vmn/test_app/{}".format(vmn.VER_FILE_NAME),
+        yaml.dump(verfile_manual_content),
+    )
+
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == manual_version[1]
