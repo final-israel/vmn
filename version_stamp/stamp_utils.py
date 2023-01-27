@@ -290,14 +290,15 @@ class GitBackend(VMNBackend):
         if not os.path.exists(vmn_cache_path):
             pathlib.Path(os.path.join(repo_path, ".vmn")).mkdir(parents=True, exist_ok=True)
             pathlib.Path(vmn_cache_path).touch()
-            self._be.git.fetch("--tags")
+
+            self._be.git.execute(["git", "fetch", "--tags"])
         else:
             minutes_ago = datetime.datetime.now() - datetime.timedelta(minutes=30)
             filemtime = datetime.datetime.fromtimestamp(os.path.getmtime(vmn_cache_path))
             # file is more than 30 minutes old
             if filemtime < minutes_ago:
                 pathlib.Path(vmn_cache_path).touch()
-                self._be.git.fetch("--tags")
+                self._be.git.execute(["git", "fetch", "--tags"])
 
     def __del__(self):
         self._be.close()
