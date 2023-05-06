@@ -319,22 +319,13 @@ class IVersionsStamper(object):
 
         self.ver_infos_from_repo = {}
         self.selected_tag = None
-        (
-            initial_version,
-            prerelease,
-            prerelease_count,
-        ) = VersionControlStamper.get_version_number_from_file(self.version_file_path)
+
+        initial_version = VersionControlStamper.get_version_number_from_file(self.version_file_path)
         if initial_version is not None:
-            verstr = stamp_utils.VMNBackend.serialize_vmn_version(
-                initial_version, prerelease, prerelease_count, self.hide_zero_hotfix
-            )
             (
                 self.selected_tag,
                 self.ver_infos_from_repo,
-            ) = self.get_version_info_from_verstr(verstr)
-            t = self.get_tag_name(initial_version)
-            if t != self.selected_tag and t in self.ver_infos_from_repo:
-                self.selected_tag = t
+            ) = self.get_version_info_from_verstr(initial_version)
 
         if not self.ver_infos_from_repo:
             (
@@ -525,31 +516,19 @@ class IVersionsStamper(object):
             hotfix,
         )
 
-    def write_version_to_file(
-        self, version_number: str, prerelease: str, prerelease_count: dict
-    ) -> None:
+    def write_version_to_file(self, version_number: str) -> None:
         if self.dry_run:
             stamp_utils.VMN_LOGGER.info(
                 "Would have written to version file:\n"
                 f"version: {version_number}\n"
-                f"prerelease: {prerelease}\n"
-                f"prerelease count: {prerelease_count}"
             )
         else:
-            self._write_version_to_vmn_version_file(
-                prerelease, prerelease_count, version_number
-            )
+            self._write_version_to_vmn_version_file(version_number)
 
         if not self.version_backends:
             return
 
-        verstr = stamp_utils.VMNBackend.serialize_vmn_version(
-            version_number,
-            prerelease,
-            prerelease_count,
-            self.hide_zero_hotfix,
-        )
-        verstr = self.get_be_formatted_version(verstr)
+        verstr = self.get_be_formatted_version(version_number)
         for backend in self.version_backends:
             try:
                 if backend == "vmn_version_file":
@@ -630,21 +609,14 @@ class IVersionsStamper(object):
             stamp_utils.VMN_LOGGER.debug(e, exc_info=True)
             raise RuntimeError(e)
 
-    def _write_version_to_vmn_version_file(
-        self, prerelease, prerelease_count, version_number
-    ):
+    def _write_version_to_vmn_version_file(self, version_number):
         file_path = self.version_file_path
-        if prerelease is None:
-            prerelease = "release"
+
         # this method will write the stamped ver of an app to a file,
         # weather the file pre exists or not
         try:
             with open(file_path, "w") as fid:
-                ver_dict = {
-                    "version_to_stamp_from": version_number,
-                    "prerelease": prerelease,
-                    "prerelease_count": prerelease_count,
-                }
+                ver_dict = {"version_to_stamp_from": version_number}
                 yaml.dump(ver_dict, fid)
         except IOError as e:
             stamp_utils.VMN_LOGGER.error(f"Error writing ver file: {file_path}\n")
@@ -1123,11 +1095,7 @@ class VersionControlStamper(IVersionsStamper):
         if not self.should_publish:
             return 0
 
-        self.write_version_to_file(
-            version_number=app_version,
-            prerelease=prerelease,
-            prerelease_count=prerelease_count,
-        )
+        self.write_version_to_file(verstr)
 
         version_files_to_add = self.get_files_to_add_to_index(self.version_files)
 
@@ -1493,11 +1461,7 @@ def handle_stamp(vmn_ctx):
 
             return 1
 
-    (
-        initial_version,
-        prerelease,
-        prerelease_count,
-    ) = VersionControlStamper.get_version_number_from_file(
+    initial_version = VersionControlStamper.get_version_number_from_file(
         vmn_ctx.vcs.version_file_path
     )
 
@@ -1532,9 +1496,9 @@ def handle_stamp(vmn_ctx):
                 temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["release_mode"]
 
             initial_version = verstr
-            if prerelease == "release":
-                prerelease = temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["prerelease"]
-                prerelease_count = temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["prerelease_count"]
+
+            prerelease = temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["prerelease"]
+            prerelease_count = temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["prerelease_count"]
 
     if vmn_ctx.vcs.tracked and vmn_ctx.vcs.release_mode is None:
         vmn_ctx.vcs.current_version_info["stamping"]["app"][
@@ -1849,14 +1813,8 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
             status["state"].add("outgoing")
 
     if "name" in vcs.current_version_info["stamping"]["app"]:
-        (
-            initial_version,
-            prerelease,
-            prerelease_count,
-        ) = VersionControlStamper.get_version_number_from_file(vcs.version_file_path)
-        matched_version_info = vcs.find_matching_version(
-            initial_version, prerelease, prerelease_count
-        )
+        initial_version = VersionControlStamper.get_version_number_from_file(vcs.version_file_path)
+        matched_version_info = vcs.find_matching_version(initial_version)
         if matched_version_info is None:
             status["modified"] = True
             status["state"].add("modified")
