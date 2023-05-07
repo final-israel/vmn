@@ -1437,6 +1437,7 @@ def handle_stamp(vmn_ctx):
     vmn_ctx.vcs.buildmetadata = None
     vmn_ctx.vcs.release_mode = vmn_ctx.args.release_mode
     vmn_ctx.vcs.optional_release_mode = vmn_ctx.args.orm
+    vmn_ctx.vcs.limited_release_mode = vmn_ctx.args.lrm
     vmn_ctx.vcs.override_root_version = vmn_ctx.args.orv
     vmn_ctx.vcs.override_version = vmn_ctx.args.ov
     vmn_ctx.vcs.dry_run = vmn_ctx.args.dry
@@ -1445,7 +1446,9 @@ def handle_stamp(vmn_ctx):
     if vmn_ctx.vcs.release_mode == "micro":
         vmn_ctx.vcs.release_mode = "hotfix"
 
-    assert vmn_ctx.vcs.release_mode is None or vmn_ctx.vcs.optional_release_mode is None
+    assert vmn_ctx.vcs.release_mode is None \
+           or vmn_ctx.vcs.optional_release_mode is None \
+           or vmn_ctx.vcs.limited_release_mode is None
 
     optional_status = {"modified", "detached"}
     expected_status = {
@@ -1458,7 +1461,7 @@ def handle_stamp(vmn_ctx):
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status["error"]:
         stamp_utils.VMN_LOGGER.debug(
-            f"Error occured when getting the repo status: {status}", exc_info=True
+            f"Error occurred when getting the repo status: {status}", exc_info=True
         )
 
         return 1
@@ -3032,6 +3035,14 @@ def add_arg_stamp(subprasers):
     pstamp.add_argument(
         "--orm",
         "--optional-release-mode",
+        choices=["major", "minor", "patch", "hotfix"],
+        default=None,
+        help="major / minor / patch / hotfix",
+        metavar="",
+    )
+    pstamp.add_argument(
+        "--lrm",
+        "--limited-release-mode",
         choices=["major", "minor", "patch", "hotfix"],
         default=None,
         help="major / minor / patch / hotfix",
