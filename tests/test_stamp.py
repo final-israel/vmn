@@ -138,8 +138,6 @@ def test_git_hooks(app_layout, capfd, hook_name):
     assert "0.0.2\n" == captured.out
 
 
-
-
 def test_multi_repo_dependency(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -1526,6 +1524,22 @@ def test_no_fetch_branch_configured_for_deps(app_layout, capfd):
     err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
     assert err == 0
 
+
+def test_show_no_log_in_stdout(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(f"{app_layout.app_name}", "patch")
+    app_layout.write_file_commit_and_push("test_repo_0", "a/b/c/f1.file", "msg1")
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    assert "dirty:\n- modified\nout: 0.0.1\n\n" == captured.out
+
+    with open(os.path.join(app_layout.repo_path, ".vmn", "vmn.log")) as log:
+        assert 'Test logprint in show' in log.read()
 
 # TODO:: add test for app release. merge squash and show. expect the newly released version
 
