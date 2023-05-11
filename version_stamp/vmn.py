@@ -809,14 +809,14 @@ class VersionControlStamper(IVersionsStamper):
     @stamp_utils.measure_runtime_decorator
     def get_version_number_from_file(version_file_path) -> str or None:
         if not os.path.exists(version_file_path):
-            return (None, None, None)
+            return None, None, None
 
         with open(version_file_path, "r") as fid:
             ver_dict = yaml.safe_load(fid)
             if "version_to_stamp_from" in ver_dict:
                 if "prerelease" not in ver_dict or "prerelease" not in ver_dict:
                     # Backward for 0.4.0-rc6
-                    return (ver_dict["version_to_stamp_from"], "release", {})
+                    return ver_dict["version_to_stamp_from"], "release", {}
 
                 return (
                     ver_dict["version_to_stamp_from"],
@@ -826,7 +826,7 @@ class VersionControlStamper(IVersionsStamper):
 
             # Backward compatible vmn 0.3.9 code
             if "prerelease" not in ver_dict:
-                return (ver_dict["last_stamped_version"], "release", {})
+                return ver_dict["last_stamped_version"], "release", {}
 
             return (
                 ver_dict["last_stamped_version"],
@@ -1306,7 +1306,7 @@ class VersionControlStamper(IVersionsStamper):
                 f'{self.current_version_info["stamping"]["msg"]}'
             )
         else:
-            for f in set(list_of_files) - set([branch_conf_path]):
+            for f in set(list_of_files) - {branch_conf_path}:
                 try:
                     self.backend._be.index.remove([f], working_tree=True)
                 except Exception as exc:
@@ -1448,7 +1448,8 @@ def handle_stamp(vmn_ctx):
 
     assert vmn_ctx.vcs.release_mode is None \
            or vmn_ctx.vcs.optional_release_mode is None \
-           or vmn_ctx.vcs.limited_release_mode is None
+           or vmn_ctx.vcs.limited_release_mode is None \
+           or vmn_ctx.vcs.prerelease
 
     optional_status = {"modified", "detached"}
     expected_status = {
@@ -1780,7 +1781,9 @@ def handle_goto(vmn_ctx):
 
 
 @stamp_utils.measure_runtime_decorator
-def _get_repo_status(vcs, expected_status, optional_status=set()):
+def _get_repo_status(vcs, expected_status, optional_status=None):
+    if optional_status is None:
+        optional_status = set()
     be = vcs.backend
     default_status = {
         "pending": False,

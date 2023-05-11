@@ -2,6 +2,7 @@ import shutil
 import yaml
 from test_utils import _init_app, _stamp_app, _goto, _show, _run_vmn_init, _configure_2_deps
 
+
 def test_goto_deleted_repos(app_layout):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -21,6 +22,7 @@ def test_goto_deleted_repos(app_layout):
     err = _goto(app_layout.app_name, version="0.0.2")
     assert err == 0
 
+
 def test_rc_goto(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name, "1.2.3")
@@ -34,14 +36,14 @@ def test_rc_goto(app_layout, capfd):
         pass
 
     err, ver_info, _ = _stamp_app(
-        app_layout.app_name, release_mode="minor", prerelease="rcaaa"
+        app_layout.app_name, release_mode="minor", prerelease="RCA"
     )
     assert err == 0
 
     data = ver_info["stamping"]["app"]
-    assert data["_version"] == "1.3.0-rcaaa1"
+    assert data["_version"] == "1.3.0-RCA1"
 
-    err = _goto(app_layout.app_name, version="1.3.0-rcaaa1")
+    err = _goto(app_layout.app_name, version="1.3.0-RCA1")
     assert err == 0
 
 
@@ -60,17 +62,18 @@ def test_goto_print(app_layout, capfd):
     err = _goto(app_layout.app_name, version="1.3.0")
     assert err == 0
 
-    sout, serr = capfd.readouterr()
+    sout, s_err = capfd.readouterr()
     assert f"[INFO] You are at version 1.3.0 of {app_layout.app_name}\n" == sout
 
     err = _goto(app_layout.app_name)
     assert err == 0
 
-    sout, serr = capfd.readouterr()
+    sout, s_err = capfd.readouterr()
     assert (
         f"[INFO] You are at the tip of the branch of version 2.0.0 for {app_layout.app_name}\n"
         == sout
     )
+
 
 def test_basic_goto(app_layout, capfd):
     _run_vmn_init()
@@ -196,6 +199,7 @@ def test_basic_goto(app_layout, capfd):
     captured = capfd.readouterr()
     assert "[ERROR] Wrong unique id\n" == captured.err
 
+
 def test_multi_repo_dependency_goto_and_show(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -203,7 +207,7 @@ def test_multi_repo_dependency_goto_and_show(app_layout, capfd):
     err, _, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    conf = _configure_2_deps(app_layout, params)
+    _configure_2_deps(app_layout, params)
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
 
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
@@ -233,7 +237,7 @@ def test_multi_repo_dependency_on_specific_branch_goto(app_layout, capfd):
     err, _, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    conf = _configure_2_deps(app_layout, params, specific_branch="new_branch")
+    _configure_2_deps(app_layout, params, specific_branch="new_branch")
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
 
     capfd.readouterr()

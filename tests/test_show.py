@@ -2,6 +2,8 @@ import os
 import stat
 import yaml
 from test_utils import _init_app, _stamp_app, _release_app, _goto, _show, _run_vmn_init, _add_buildmetadata_to_version
+
+
 def test_basic_show(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -416,6 +418,7 @@ def test_show_from_file_conf_changed(app_layout, capfd):
         f"{app_layout.app_name}.\n" == captured.out
     )
 
+
 def test_basic_root_show(app_layout, capfd):
     _run_vmn_init()
     app_name = "root_app/app1"
@@ -470,6 +473,7 @@ def test_basic_root_show(app_layout, capfd):
     assert app_name == out_dict["latest_service"]
     assert app_name in out_dict["services"]
     assert out_dict["services"][app_name] == "0.2.2"
+
 
 def test_show_after_1_tag_removed(app_layout, capfd):
     _run_vmn_init()
@@ -532,8 +536,9 @@ def test_show_after_multiple_tags_removed_0_tags_left(app_layout, capfd):
     assert (
         captured.err == "[ERROR] Failed to get version info for tag: test_app_0.0.0\n"
         "[ERROR] Untracked app. Run vmn init-app first\n"
-        "[ERROR] Error occured when getting the repo status\n"
+        "[ERROR] Error occurred when getting the repo status\n"
     )
+
 
 def test_show_no_ff_rebase_rc(app_layout, capfd):
     _run_vmn_init()
@@ -574,7 +579,7 @@ def test_show_on_local_only_branch_1_commit_after(app_layout, capfd):
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
 
-    main_branch = app_layout._app_backend.be.get_active_branch()
+    _ = app_layout._app_backend.be.get_active_branch()
     other_branch = "topic/abc"
 
     app_layout.checkout(other_branch, create_new=True)
@@ -600,7 +605,7 @@ def test_show_on_local_only_branch_0_commits_after(app_layout, capfd):
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
 
-    main_branch = app_layout._app_backend.be.get_active_branch()
+    app_layout._app_backend.be.get_active_branch()
     other_branch = "topic/abc"
 
     app_layout.checkout(other_branch, create_new=True)

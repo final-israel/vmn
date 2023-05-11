@@ -32,14 +32,14 @@ def test_jinja2_gen(app_layout, capfd):
         "test_repo_0", "f1.jinja2", jinja2_content, commit=False
     )
 
-    tpath = os.path.join(app_layout._repos["test_repo_0"]["path"], "f1.jinja2")
+    t_path = os.path.join(app_layout._repos["test_repo_0"]["path"], "f1.jinja2")
     opath = os.path.join(app_layout._repos["test_repo_0"]["path"], "jinja_out.txt")
-    err = _gen(app_layout.app_name, tpath, opath)
+    err = _gen(app_layout.app_name, t_path, opath)
     assert err == 0
 
     m_time = os.path.getmtime(opath)
 
-    err = _gen(app_layout.app_name, tpath, opath)
+    err = _gen(app_layout.app_name, t_path, opath)
     assert err == 0
 
     m_time_after = os.path.getmtime(opath)
@@ -49,7 +49,7 @@ def test_jinja2_gen(app_layout, capfd):
     # read to clear stderr and out
     capfd.readouterr()
 
-    err = _gen(app_layout.app_name, tpath, opath, verify_version=True)
+    err = _gen(app_layout.app_name, t_path, opath, verify_version=True)
     assert err == 1
 
     captured = capfd.readouterr()
@@ -64,7 +64,7 @@ def test_jinja2_gen(app_layout, capfd):
     assert err == 0
     capfd.readouterr()
 
-    err = _gen(app_layout.app_name, tpath, opath, verify_version=True, version="0.0.1")
+    err = _gen(app_layout.app_name, t_path, opath, verify_version=True, version="0.0.1")
     assert err == 1
 
     captured = capfd.readouterr()
@@ -80,16 +80,16 @@ def test_jinja2_gen(app_layout, capfd):
     err = _goto(app_layout.app_name, version="0.0.1")
     assert err == 0
 
-    err = _gen(app_layout.app_name, tpath, opath, verify_version=True)
+    err = _gen(app_layout.app_name, t_path, opath, verify_version=True)
     assert err == 0
 
     err = _goto(app_layout.app_name)
     assert err == 0
 
-    err = _gen(app_layout.app_name, tpath, opath, verify_version=True)
+    err = _gen(app_layout.app_name, t_path, opath, verify_version=True)
     assert err == 1
 
-    err = _gen(app_layout.app_name, tpath, opath)
+    err = _gen(app_layout.app_name, t_path, opath)
     assert err == 0
 
     new_name = f"{app_layout.app_name}2/s1"
@@ -98,7 +98,7 @@ def test_jinja2_gen(app_layout, capfd):
     err, _, _ = _stamp_app(new_name, "patch")
     assert err == 0
 
-    err = _gen(app_layout.app_name, tpath, opath)
+    err = _gen(app_layout.app_name, t_path, opath)
     assert err == 0
 
     err, _, params = _stamp_app(app_layout.app_name, "patch")
@@ -109,7 +109,7 @@ def test_jinja2_gen(app_layout, capfd):
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg2", commit=False)
     app_layout.write_file_commit_and_push("repo2", "f1.file", "msg1", push=False)
 
-    err = _gen(app_layout.app_name, tpath, opath)
+    err = _gen(app_layout.app_name, t_path, opath)
     assert err == 0
 
     with open(opath, "r") as f:
@@ -142,10 +142,10 @@ def test_jinja2_gen_custom(app_layout, capfd):
         "test_repo_0", "custom.yml", custom_keys_content
     )
 
-    tpath = os.path.join(app_layout._repos["test_repo_0"]["path"], "f1.jinja2")
+    t_path = os.path.join(app_layout._repos["test_repo_0"]["path"], "f1.jinja2")
     custom_path = os.path.join(app_layout._repos["test_repo_0"]["path"], "custom.yml")
     opath = os.path.join(app_layout._repos["test_repo_0"]["path"], "jinja_out.txt")
-    err = _gen(app_layout.app_name, tpath, opath, custom_path=custom_path)
+    err = _gen(app_layout.app_name, t_path, opath, custom_path=custom_path)
     assert err == 0
 
     with open(opath, "r") as f:

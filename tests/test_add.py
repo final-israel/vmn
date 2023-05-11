@@ -1,5 +1,7 @@
 import yaml
 from test_utils import _init_app, _stamp_app, _release_app, _show, _run_vmn_init, _add_buildmetadata_to_version
+
+
 def test_add_bm(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)

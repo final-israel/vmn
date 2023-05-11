@@ -1,10 +1,8 @@
 import os
 import sys
-
 sys.path.append("{0}/../version_stamp".format(os.path.dirname(__file__)))
-
 import vmn
-import stamp_utils.py
+import stamp_utils
 
 
 def _run_vmn_init():
@@ -30,7 +28,7 @@ def _init_app(app_name, starting_version="0.0.0"):
         # Python3.9 only
         merged_dict = vmn_ctx.params | vmn_ctx.vcs.__dict__
     except:
-        merged_dict = {**(vmn_ctx.params), **(vmn_ctx.vcs.__dict__)}
+        merged_dict = {**vmn_ctx.params, **vmn_ctx.vcs.__dict__}
 
     return ret, ver_info, merged_dict
 
@@ -56,7 +54,7 @@ def _release_app(app_name, version=None):
         # Python3.9 only
         merged_dict = vmn_ctx.params | vmn_ctx.vcs.__dict__
     except:
-        merged_dict = {**(vmn_ctx.params), **(vmn_ctx.vcs.__dict__)}
+        merged_dict = {**vmn_ctx.params, **vmn_ctx.vcs.__dict__}
 
     return ret, ver_info, merged_dict
 
@@ -92,7 +90,7 @@ def _stamp_app(app_name, release_mode=None, optional_release_mode=None, limited_
         # Python3.9 only
         merged_dict = vmn_ctx.params | vmn_ctx.vcs.__dict__
     except:
-        merged_dict = {**(vmn_ctx.params), **(vmn_ctx.vcs.__dict__)}
+        merged_dict = {**vmn_ctx.params, **vmn_ctx.vcs.__dict__}
 
     return ret, ver_info, merged_dict
 
@@ -234,6 +232,7 @@ def _configure_2_deps(
         be.__del__()
 
     app_layout.write_conf(params["app_conf_path"], **conf)
+    # TODO: Use specific_hash and specific_tag
 
     return conf
 

@@ -1,12 +1,17 @@
 import copy
 import json
-import os
 import shutil
 from git.exc import GitCommandError
 import pytest
 import toml
 import yaml
-from test_utils import _init_app, _stamp_app, _release_app, _goto, _show, _run_vmn_init, _configure_empty_conf, _configure_2_deps
+import os
+import sys
+sys.path.append("{0}/../version_stamp".format(os.path.dirname(__file__)))
+import vmn
+import stamp_utils
+from test_utils import _init_app, _stamp_app, _release_app, \
+    _goto, _show, _run_vmn_init, _configure_empty_conf, _configure_2_deps
 
 
 def test_double_stamp_no_commit(app_layout):
@@ -85,7 +90,7 @@ def test_git_hooks(app_layout, capfd, hook_name):
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "connnntenctt")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "connect")
 
     # More post-checkout, post-commit, post-merge, post-rewrite, pre-commit, pre-push
     app_layout.write_file_commit_and_push(
@@ -136,8 +141,6 @@ def test_git_hooks(app_layout, capfd, hook_name):
 
     captured = capfd.readouterr()
     assert "0.0.2\n" == captured.out
-
-
 
 
 def test_multi_repo_dependency(app_layout, capfd):
@@ -551,23 +554,23 @@ def test_rc_stamping(app_layout, capfd):
 
 
 def test_version_template():
-    formated_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
+    formatted_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
         "2.0.9", vmn.IVersionsStamper.parse_template("[{major}][-{prerelease}]"), True
     )
 
-    assert formated_version == "2"
+    assert formatted_version == "2"
 
-    formated_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
+    formatted_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
         "2.0.9.0", vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"), True
     )
 
-    assert formated_version == "2"
+    assert formatted_version == "2"
 
-    formated_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
+    formatted_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
         "2.0.9.0", vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"), False
     )
 
-    assert formated_version == "2-0"
+    assert formatted_version == "2-0"
 
 
 def test_stamp_on_branch_merge_squash(app_layout):
@@ -662,7 +665,7 @@ def test_manual_file_adjustment(app_layout):
     file_path = params["version_file_path"]
 
     app_layout.remove_file(file_path)
-    verfile_manual_content = {
+    version_file_manual_content = {
         "version_to_stamp_from": "0.2.3",
         "prerelease": "release",
         "prerelease_count": {},
@@ -671,7 +674,7 @@ def test_manual_file_adjustment(app_layout):
     app_layout.write_file_commit_and_push(
         "test_repo_0",
         ".vmn/test_app/{}".format(vmn.VER_FILE_NAME),
-        yaml.dump(verfile_manual_content),
+        yaml.dump(version_file_manual_content),
     )
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
@@ -687,7 +690,7 @@ def test_manual_file_adjustment_with_major_version(app_layout):
     file_path = params["version_file_path"]
 
     app_layout.remove_file(file_path)
-    verfile_manual_content = {
+    version_file_manual_content = {
         "version_to_stamp_from": "1.2.3",
         "prerelease": "release",
         "prerelease_count": {},
@@ -696,13 +699,14 @@ def test_manual_file_adjustment_with_major_version(app_layout):
     app_layout.write_file_commit_and_push(
         "test_repo_0",
         ".vmn/test_app/{}".format(vmn.VER_FILE_NAME),
-        yaml.dump(verfile_manual_content),
+        yaml.dump(version_file_manual_content),
     )
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
     _version = ver_info["stamping"]["app"]["_version"]
     assert "1.2.4" == _version
+
 
 def test_version_backends_cargo(app_layout, capfd):
     _run_vmn_init()
@@ -884,7 +888,7 @@ def test_version_backends_npm(app_layout, capfd):
     assert err == 0
 
 
-def test_backward_compatability_with_previous_vmn(app_layout, capfd):
+def test_backward_compatibility_with_previous_vmn(app_layout, capfd):
     app_layout.stamp_with_previous_vmn()
     capfd.readouterr()
     err, ver_info, _ = _stamp_app("app1", "major")
@@ -964,7 +968,7 @@ def test_shallow_non_vmn_commit_repo_stamp(app_layout, capfd):
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "connnntenctt")
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "connect")
 
     clone_path = app_layout.create_new_clone("test_repo_0", depth=1)
     app_layout.set_working_dir(clone_path)
@@ -1050,7 +1054,7 @@ def test_run_vmn_from_non_git_repo(app_layout, capfd):
 
 
 def test_bad_tag(app_layout, capfd):
-    res = _run_vmn_init()
+    _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(f"{app_layout.app_name}", "patch")
 
@@ -1127,7 +1131,7 @@ def test_removed_vmn_tag_and_version_file_repo_stamp(app_layout, manual_version)
     file_path = params["version_file_path"]
 
     app_layout.remove_file(file_path)
-    verfile_manual_content = {
+    version_file_manual_content = {
         "version_to_stamp_from": manual_version[0],
         "prerelease": "release",
         "prerelease_count": {},
@@ -1136,7 +1140,7 @@ def test_removed_vmn_tag_and_version_file_repo_stamp(app_layout, manual_version)
     app_layout.write_file_commit_and_push(
         "test_repo_0",
         ".vmn/test_app/{}".format(vmn.VER_FILE_NAME),
-        yaml.dump(verfile_manual_content),
+        yaml.dump(version_file_manual_content),
     )
 
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
@@ -1156,7 +1160,7 @@ def test_conf_for_branch(app_layout, capfd):
     )
 
     capfd.readouterr()
-    err = _show(app_layout.app_name)
+    _show(app_layout.app_name)
     captured = capfd.readouterr()
 
     tmp = yaml.safe_load(captured.out)
@@ -1168,7 +1172,7 @@ def test_conf_for_branch(app_layout, capfd):
     subprocess.call(base_cmd, cwd=app_layout.repo_path)
 
     capfd.readouterr()
-    err = _show(app_layout.app_name)
+    _show(app_layout.app_name)
     captured = capfd.readouterr()
 
     tmp = yaml.safe_load(captured.out)
@@ -1441,7 +1445,7 @@ def test_multi_repo_dependency_goto_and_stamp(app_layout, capfd):
     err, _, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    conf = _configure_2_deps(app_layout, params)
+    _configure_2_deps(app_layout, params)
 
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
 
@@ -1556,7 +1560,6 @@ def test_two_prs_from_same_origin(app_layout, capfd):
     assert data["prerelease"] == second_branch
 
 
-
 def test_marge_and_check_for_conflicts(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -1588,7 +1591,7 @@ def test_marge_and_check_for_conflicts(app_layout, capfd):
     try:
         app_layout._app_backend.be._be.git.merge(pr_branch)
     except GitCommandError as err:
-        pass
+        print(err)
     result = app_layout._app_backend.be._be.git.status()
     assert "conflict" in result
 
@@ -1618,7 +1621,7 @@ def test_two_prs_from_same_origin_after_release(app_layout, capfd):
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
     capfd.readouterr()
     err, ver_info, _ = _stamp_app(app_layout.app_name, optional_release_mode="patch", prerelease=second_branch)
-    c = capfd.readouterr()
+    captured = capfd.readouterr()
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"0.0.3-{second_branch}1"
