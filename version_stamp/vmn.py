@@ -971,7 +971,7 @@ class VersionControlStamper(IVersionsStamper):
             ):
                 stamp_utils.VMN_LOGGER.error(
                     f"The version {initial_version} was already released. "
-                    "Will refuse to stamp prerelease version "
+                    "Will refuse to stamp prerelease version"
                 )
                 raise RuntimeError()
 
