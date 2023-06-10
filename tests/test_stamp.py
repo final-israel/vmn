@@ -1701,3 +1701,26 @@ def test_all_release_modes(app_layout, capfd):
     assert data["_version"] == f"0.0.2-{c1_branch}1"
     assert data["prerelease"] == c1_branch
     app_layout.checkout(main_branch, create_new=False)
+
+def test_overwrite_version_and_orm(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    c1_branch = "c1"
+    app_layout.checkout(c1_branch, create_new=True)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="patch", prerelease=c1_branch)
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-{c1_branch}1"
+    assert data["prerelease"] == c1_branch
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    err, ver_info, _ = _stamp_app(app_layout.app_name, optional_release_mode="patch", prerelease=c1_branch, override_version="0.1.0")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.1.1-{c1_branch}1"
+    assert data["prerelease"] == c1_branch
+    app_layout.checkout(main_branch, create_new=False)

@@ -59,7 +59,7 @@ def _release_app(app_name, version=None):
     return ret, ver_info, merged_dict
 
 
-def _stamp_app(app_name, release_mode=None, optional_release_mode=None, limited_release_mode=None, prerelease=None):
+def _stamp_app(app_name, release_mode=None, optional_release_mode=None, limited_release_mode=None, prerelease=None, override_version=None):
     args_list = ["stamp"]
     if release_mode is not None:
         args_list.extend(["-r", release_mode])
@@ -72,6 +72,9 @@ def _stamp_app(app_name, release_mode=None, optional_release_mode=None, limited_
 
     if prerelease is not None:
         args_list.extend(["--pr", prerelease])
+
+    if override_version is not None:
+        args_list.extend(["--ov", override_version])
 
     args_list.append(app_name)
 
