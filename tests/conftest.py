@@ -196,7 +196,6 @@ class FSAppLayoutFixture(object):
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
         subprocess.call(base_cmd, cwd=self.repo_path)
 
-
     def pull(self, tags=False):
         import subprocess
 
@@ -265,7 +264,7 @@ class FSAppLayoutFixture(object):
 
         base_cmd = [
             f"{os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh",
-            vmn_version
+            vmn_version,
         ]
 
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
