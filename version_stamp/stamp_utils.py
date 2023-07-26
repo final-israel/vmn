@@ -64,7 +64,6 @@ VMN_OLD_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_OLD_REGEX}$"
 # Regex for matching versions stamped by vmn
 VMN_REGEX = rf"^{_VMN_REGEX}$"
 
-# TODO: create an abstraction layer on top of tag names versus the actual Semver versions
 VMN_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_REGEX}$"
 
 _VMN_ROOT_REGEX = rf"(?P<version>{_DIGIT_REGEX})"
@@ -1030,7 +1029,6 @@ class GitBackend(VMNBackend):
             tag_objects.append(ver_infos[k]["tag_object"])
 
         # We want the newest tag on top because we skip "buildmetadata tags"
-        # TODO:: solve the weird coupling between here and get_first_reachable_version_info
         tag_objects = sorted(
             tag_objects, key=lambda t: t.object.tagged_date, reverse=True
         )
@@ -1052,7 +1050,6 @@ class GitBackend(VMNBackend):
                 tag_objects.append(ver_infos[k]["tag_object"])
 
             # We want the newest tag on top because we skip "buildmetadata tags"
-            # TODO:: solve the weird coupling between here and get_first_reachable_version_info
             tag_objects = sorted(
                 tag_objects, key=lambda t: t.object.tagged_date, reverse=True
             )
@@ -1100,7 +1097,6 @@ class GitBackend(VMNBackend):
                 tag_objects.append(ver_infos[k]["tag_object"])
 
         # We want the newest tag on top because we skip "buildmetadata tags"
-        # TODO:: solve the weird coupling between here and get_first_reachable_version_info
         tag_objects = sorted(
             tag_objects, key=lambda t: t.object.tagged_date, reverse=True
         )
@@ -1493,11 +1489,9 @@ class GitBackend(VMNBackend):
     @measure_runtime_decorator
     def checkout(self, rev=None, tag=None, branch=None):
         if tag is not None:
-            # TODO:: maybe it issafer to
             rev = f"refs/tags/{tag}"
         elif branch is not None:
-            # TODO:: : f"refs/heads/{branch}"
-            rev = f"{branch}"
+            rev = f"refs/heads/{branch}"
 
         assert rev is not None
 
@@ -1530,7 +1524,8 @@ class GitBackend(VMNBackend):
             if p.message.startswith(INIT_COMMIT_MESSAGE):
                 return p.hexsha
 
-            # TODO:: think how to use this tags for later in order to avoid getting all tags again.
+            # TODO:: think how to use this tags for later in order
+            #  to avoid getting all tags again. Not sure this is a problem even
             ver_infos = self.get_all_commit_tags(p.hexsha)
             if not ver_infos:
                 VMN_LOGGER.warning(

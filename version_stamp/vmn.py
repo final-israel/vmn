@@ -1241,7 +1241,7 @@ class VersionControlStamper(IVersionsStamper):
             else:
                 self.backend.revert_vmn_commit(prev_changeset, self.version_files)
 
-            # TODO:: turn to error codes. This one means - exit without retries
+            # TODO:: turn to error codes (enums). This one means - exit without retries
             return 3
 
         tag = f'{self.name.replace("/", "-")}_{app_version}'
@@ -1474,7 +1474,6 @@ def handle_init(vmn_ctx):
 def handle_init_app(vmn_ctx):
     vmn_ctx.vcs.dry_run = vmn_ctx.args.dry
 
-    # TODO: validate version number is of type major.minor.patch[.hotfix]
     err = _init_app(vmn_ctx.vcs, vmn_ctx.args.version)
     if err:
         return 1
