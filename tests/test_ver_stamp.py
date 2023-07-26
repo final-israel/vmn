@@ -1775,6 +1775,34 @@ def test_manual_file_adjustment_with_major_version(app_layout):
     assert "1.2.4" == _version
 
 
+def test_manual_file_adjustment_rc(app_layout):
+    _run_vmn_init()
+    _, _, params = _init_app(app_layout.app_name, "0.2.1-rc.5")
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, optional_release_mode="patch")
+    assert err == 0
+    _version = ver_info["stamping"]["app"]["_version"]
+    assert "0.2.1-rc.6" == _version
+
+    file_path = params["version_file_path"]
+
+    app_layout.remove_file(file_path)
+    verfile_manual_content = {
+        "version_to_stamp_from": "0.2.3-alpha9.9",
+    }
+    # now we want to override the version by changing the file version:
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        ".vmn/test_app/{}".format(vmn.VER_FILE_NAME),
+        yaml.dump(verfile_manual_content),
+    )
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, optional_release_mode="patch")
+    assert err == 0
+    _version = ver_info["stamping"]["app"]["_version"]
+    assert "0.2.3-alpha9.10" == _version
+
+
 def test_basic_root_show(app_layout, capfd):
     _run_vmn_init()
     app_name = "root_app/app1"

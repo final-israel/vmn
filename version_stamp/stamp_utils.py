@@ -462,7 +462,7 @@ class VMNBackend(object):
     def serialize_vmn_base_version(
         major, minor, patch, hotfix=None, hide_zero_hotfix=None
     ):
-        if hide_zero_hotfix is not None and hide_zero_hotfix and hotfix == 0:
+        if hide_zero_hotfix and hotfix == 0:
             hotfix = None
 
         vmn_version = f"{major}.{minor}.{patch}"
@@ -1610,8 +1610,6 @@ class GitBackend(VMNBackend):
     def get_tag_version_info(self, tag_name):
         ver_infos = {}
         tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(tag_name)
-
-        # TODO:: support starting from rc versions
 
         if commit_tag_obj is None:
             VMN_LOGGER.debug(f"Tried to find {tag_name} but with no success")

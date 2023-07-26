@@ -556,26 +556,14 @@ class IVersionsStamper(object):
             hide_zero_hotfix=self.hide_zero_hotfix,
         )
 
-        tag_name_prefix = stamp_utils.VMNBackend.serialize_vmn_tag_name(
-            self.name, base_version
-        )
-        tag_name_prefix = f"{tag_name_prefix}-*"
-        tag = self.backend.get_latest_available_tag(tag_name_prefix)
-
-        ver_info_c = self.ver_infos_from_repo[self.selected_tag]
-        if tag is not None:
-            t, ver_info_c = self.backend.parse_tag_message(tag)
-
-        initialprerelease = \
-            self.ver_infos_from_repo[self.selected_tag]["ver_info"]["stamping"]["app"]["prerelease"]
-        initialprerelease_count = ver_info_c["ver_info"]["stamping"]["app"]["prerelease_count"]
-
+        initialprerelease = props['prerelease']
         prerelease = self.prerelease
         # If user did not specify a change in prerelease,
         # stay with the previous one
-        if prerelease is None and release_mode is None:
+        if prerelease is None:
             prerelease = initialprerelease
-        prerelease_count = copy.deepcopy(initialprerelease_count)
+            if release_mode is not None:
+                prerelease = "release"
 
         if prerelease == "release":
             return stamp_utils.VMNBackend.serialize_vmn_version(
@@ -583,33 +571,36 @@ class IVersionsStamper(object):
                 hide_zero_hotfix=self.hide_zero_hotfix,
             ), {}
 
-        if prerelease not in prerelease_count:
-            prerelease_count[prerelease] = 0
-
-        res_ver = stamp_utils.VMNBackend.serialize_vmn_version(
-            base_version,
-            prerelease=prerelease,
-        )
+        initialprerelease_count = {}
         tag_name_prefix = stamp_utils.VMNBackend.serialize_vmn_tag_name(
-            self.name,
-            res_ver
+            self.name, base_version
         )
-        # TODO:: check if * can be replaced by .+
-        tag_name_prefix = f"{tag_name_prefix}*"
-
+        tag_name_prefix = f"{tag_name_prefix}-*"
         tag = self.backend.get_latest_available_tag(tag_name_prefix)
-        if tag:
-            tprops = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
 
-            if not tprops["old_tag_format"]:
-                global_val = tprops["rcn"]
+        # Means we found existing prerelease
+        if tag is not None:
+            t, prerelease_ver_info_c = self.backend.parse_tag_message(tag)
+
+            initialprerelease_count = prerelease_ver_info_c["ver_info"]["stamping"]["app"]["prerelease_count"]
+
+        if props['rcn'] is None:
+            props['rcn'] = 0
+
+        rcn = props["rcn"]
+        prerelease_count = initialprerelease_count
+        if prerelease not in prerelease_count:
+            if prerelease == props["prerelease"]:
+                rcn = props['rcn']
             else:
-                global_val = int(tprops["prerelease"].split(prerelease)[1])
+                rcn = 0
 
-            prerelease_count[prerelease] = max(
-                prerelease_count[prerelease],
-                global_val
-            )
+            prerelease_count[prerelease] = rcn
+
+        prerelease_count[prerelease] = max(
+            prerelease_count[prerelease],
+            rcn,
+        )
 
         prerelease_count[prerelease] += 1
 
@@ -618,8 +609,8 @@ class IVersionsStamper(object):
 
         return stamp_utils.VMNBackend.serialize_vmn_version(
             base_version,
-            prerelease,
-            prerelease_count[prerelease],
+            prerelease=prerelease,
+            rcn=prerelease_count[prerelease],
             hide_zero_hotfix=self.hide_zero_hotfix,
         ), prerelease_count
 
@@ -2948,8 +2939,6 @@ def vmn_run(command_line=None):
     except:
         stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
         err = 1
-
-    stamp_utils.VMN_LOGGER.debug("Logged exception: ", exc_info=True)
 
     stamp_utils.VMN_LOGGER.debug(pformat(stamp_utils.call_count))
 
