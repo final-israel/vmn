@@ -1491,7 +1491,8 @@ class GitBackend(VMNBackend):
         if tag is not None:
             rev = f"refs/tags/{tag}"
         elif branch is not None:
-            rev = f"refs/heads/{branch}"
+            # TODO:: f"refs/heads/{branch}"
+            rev = f"{branch}"
 
         assert rev is not None
 
