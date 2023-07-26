@@ -3473,7 +3473,7 @@ def test_jenkins_checkout(app_layout, capfd):
     app_layout.checkout("new_branch", create_new=True)
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-    app_layout.checkout(main_branch)
+    app_layout.checkout_jekins(main_branch)
 
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert err == 0
