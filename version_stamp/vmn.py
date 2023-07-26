@@ -502,6 +502,11 @@ class IVersionsStamper(object):
         return version_number_oct
 
     def advance_version(self, version, release_mode, globally=True):
+        # Globally should only be used for the base version components.
+        # prerelease should always be determined globally.
+        # I do not see a use case in which I would like to get the counter
+        # relatively to a branch for prerelease and not globally
+
         props = stamp_utils.VMNBackend.deserialize_vmn_version(version)
 
         major = props["major"]
@@ -1497,9 +1502,6 @@ def handle_stamp(vmn_ctx):
 
             raise RuntimeError(err)
 
-        assert props["prerelease"] == "release"
-        assert props["buildmetadata"] is None
-
     optional_status = {"modified", "detached"}
     expected_status = {
         "repos_exist_locally",
@@ -1546,17 +1548,22 @@ def handle_stamp(vmn_ctx):
             return 1
 
     initial_version = vmn_ctx.vcs.verstr_from_file
-
-    is_release = vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"][
-                     "prerelease"] == "release"
+    tprops = stamp_utils.VMNBackend.deserialize_tag_name(
+        vmn_ctx.vcs.selected_tag
+    )
+    if tprops["verstr"] in initial_version:
+        initial_version = tprops["verstr"]
 
     if vmn_ctx.vcs.override_version:
-        # TODO:: support version with rc here and check with regex.
         initial_version = vmn_ctx.vcs.override_version
-        is_release = True
 
+    props = stamp_utils.VMNBackend.deserialize_vmn_version(initial_version)
+    is_release = props["prerelease"] == "release"
+
+    # optional_release_mode should advance only in case the starting_from
+    # version is release, otherwise it should be ignored
     if vmn_ctx.vcs.optional_release_mode and is_release:
-        verstr, _ = vmn_ctx.vcs.advance_version(
+        verstr, prerelease_count = vmn_ctx.vcs.advance_version(
             initial_version,
             vmn_ctx.vcs.optional_release_mode,
             globally=False
@@ -1568,26 +1575,24 @@ def handle_stamp(vmn_ctx):
         tag_name_prefix = f"{stamp_utils.VMNBackend.serialize_vmn_tag_name(vmn_ctx.vcs.name, base_verstr)}*"
         tag = vmn_ctx.vcs.backend.get_latest_available_tag(tag_name_prefix)
         if tag is not None and len(tag) < len(tag_name_prefix):
+            # Means we found a release version but no prerelease
             tag = None
 
         if not tag:
+            # If the version we're going towards to does not exist or
+            # exist but already released, act as if release_mode was specified
             vmn_ctx.vcs.release_mode = vmn_ctx.vcs.optional_release_mode
         else:
-            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
+            # In case some prerelease version exists, we want to
+            # "start" from this version as if the release_mode was not specified
+            props = stamp_utils.VMNBackend.deserialize_vmn_version(verstr)
 
-            (_, temp_ver_infos_from_repo) = vmn_ctx.vcs.get_version_info_from_verstr(f"{props['verstr']}")
-
-            vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["_version"] = \
-                temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["_version"]
-            vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["prerelease"] = \
-                temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["prerelease"]
-            vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"][
-                "prerelease_count"] = \
-                temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["prerelease_count"]
-            vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["release_mode"] = \
-                temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["release_mode"]
-
-            initial_version = verstr
+            initial_version = stamp_utils.VMNBackend.serialize_vmn_version(
+                base_verstr,
+                prerelease=props["prerelease"],
+                rcn=prerelease_count[props["prerelease"]] - 1,
+                hide_zero_hotfix=vmn_ctx.vcs.hide_zero_hotfix
+            )
 
     if vmn_ctx.vcs.tracked and vmn_ctx.vcs.release_mode is None:
         vmn_ctx.vcs.current_version_info["stamping"]["app"][
