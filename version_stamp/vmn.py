@@ -13,7 +13,6 @@ from multiprocessing import Pool
 from pathlib import Path
 from pprint import pformat
 
-import git
 import jinja2
 import tomlkit
 import yaml
@@ -249,9 +248,9 @@ class IVersionsStamper(object):
         self.configured_deps = flat_deps
 
     @stamp_utils.measure_runtime_decorator
-    def get_version_number_from_file(self) -> str or None:
+    def get_version_number_from_file(self) -> tuple:
         if not os.path.exists(self.version_file_path):
-            return None
+            return None, None
 
         with open(self.version_file_path, "r") as fid:
             ver_dict = yaml.safe_load(fid)
