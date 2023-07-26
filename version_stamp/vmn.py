@@ -157,7 +157,6 @@ class IVersionsStamper(object):
             # TODO:: test this
             raise RuntimeError("Failed to initialize_backend_attrs")
 
-    @stamp_utils.measure_runtime_decorator
     def update_attrs_from_app_conf_file(self):
         # TODO:: handle deleted app with missing conf file
         if os.path.isfile(self.app_conf_path):
@@ -189,7 +188,6 @@ class IVersionsStamper(object):
                 if "external_services" in data["conf"]:
                     self.external_services = data["conf"]["external_services"]
 
-    @stamp_utils.measure_runtime_decorator
     def initialize_paths(self):
         self.app_dir_path = os.path.join(
             self.vmn_root_path, ".vmn", self.name.replace("/", os.sep)
@@ -228,7 +226,6 @@ class IVersionsStamper(object):
                     self.root_app_dir_path, "root_conf.yml"
                 )
 
-    @stamp_utils.measure_runtime_decorator
     def initialize_configured_deps(self, self_base, self_dep):
         if self.raw_configured_deps:
             self.configured_deps = self.raw_configured_deps
@@ -252,11 +249,11 @@ class IVersionsStamper(object):
         self.configured_deps = flat_deps
 
     @stamp_utils.measure_runtime_decorator
-    def get_version_number_from_file(self, version_file_path) -> str or None:
-        if not os.path.exists(version_file_path):
+    def get_version_number_from_file(self) -> str or None:
+        if not os.path.exists(self.version_file_path):
             return None
 
-        with open(version_file_path, "r") as fid:
+        with open(self.version_file_path, "r") as fid:
             ver_dict = yaml.safe_load(fid)
             if "version_to_stamp_from" in ver_dict:
                 verstr = ver_dict["version_to_stamp_from"]
@@ -285,7 +282,7 @@ class IVersionsStamper(object):
 
                 raise RuntimeError(err)
 
-            return verstr
+            return verstr, props
 
     @stamp_utils.measure_runtime_decorator
     def get_first_reachable_version_info(
@@ -337,10 +334,7 @@ class IVersionsStamper(object):
 
             # TODO:: Check API commit version
 
-        if root_tag is None:
-            return
-
-        if ver_tag is None:
+        if root_tag is None or ver_tag is None:
             return
 
         ver_infos[ver_tag]["ver_info"]["stamping"]["root_app"] = \
@@ -352,20 +346,6 @@ class IVersionsStamper(object):
     @stamp_utils.measure_runtime_decorator
     def get_version_info_from_verstr(self, verstr):
         actual_tag = self.get_tag_name(verstr)
-
-        # tag_name, commit_tag_obj = self.backend.get_commit_object_from_tag_name(tag_name)
-        # if commit_tag_obj is None:
-        #     # Find the last occurrence of '.'
-        #     last_dot_index = tag_name.rfind('.')
-        #     if last_dot_index == -1:
-        #         raise RuntimeError(
-        #             f"No '.' found in tag name {tag_name} "
-        #             f"although it appears to be prerelease tag"
-        #         )
-        #
-        #     # Remove the last dot
-        #     old_tag_name = f"{tag_name[:last_dot_index]}{tag_name[last_dot_index + 1:]}"
-        #     old_tag_name, commit_tag_obj = self.backend.get_commit_object_from_tag_name(old_tag_name)
 
         try:
             props = stamp_utils.VMNBackend.deserialize_vmn_version(verstr)
@@ -388,7 +368,6 @@ class IVersionsStamper(object):
 
         return actual_tag, ver_infos
 
-    @stamp_utils.measure_runtime_decorator
     def get_tag_name(self, verstr):
         tag_name = f'{self.name.replace("/", "-")}'
         assert verstr is not None
@@ -426,17 +405,17 @@ class IVersionsStamper(object):
 
         self.ver_infos_from_repo = {}
         self.selected_tag = None
+        self.verstr_from_file, self.props_from_file = \
+            self.get_version_number_from_file()
 
-        verstr = self.get_version_number_from_file(self.version_file_path)
-
-        # verstr will be None only when running for the first time or file removed somehow
-        if verstr is not None:
+        # verstr_from_file will be None only when running for the first time or file removed somehow
+        if self.verstr_from_file is not None:
             (
                 self.selected_tag,
                 self.ver_infos_from_repo,
-            ) = self.get_version_info_from_verstr(verstr)
+            ) = self.get_version_info_from_verstr(self.verstr_from_file)
             base_ver = stamp_utils.VMNBackend.get_base_vmn_version(
-                verstr,
+                self.verstr_from_file,
                 self.hide_zero_hotfix,
             )
             t = self.get_tag_name(base_ver)
@@ -903,7 +882,7 @@ class VersionControlStamper(IVersionsStamper):
 
             # when k is the "main repo" repo
             if self.repo_name == k:
-                user_changeset = self.backend.last_user_changeset()
+                user_changeset = self.last_user_changeset
 
                 if v["hash"] != user_changeset:
                     found = False
@@ -1576,9 +1555,7 @@ def handle_stamp(vmn_ctx):
 
             return 1
 
-    initial_version = vmn_ctx.vcs.get_version_number_from_file(
-        vmn_ctx.vcs.version_file_path
-    )
+    initial_version = vmn_ctx.vcs.verstr_from_file
 
     is_release = vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"][
                      "prerelease"] == "release"
@@ -1928,7 +1905,7 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
             status["state"].add("outgoing")
 
     if "name" in vcs.current_version_info["stamping"]["app"]:
-        verstr = vcs.get_version_number_from_file(vcs.version_file_path)
+        verstr = vcs.verstr_from_file
         matched_version_info = vcs.find_matching_version(verstr)
         if matched_version_info is None:
             status["modified"] = True
@@ -2952,10 +2929,8 @@ def vmn_run(command_line=None):
         if not command_line[0].endswith("vmn"):
             command_line.insert(0, "vmn")
 
-        bold_char = "\033[1m"
-        end_char = "\033[0m"
         stamp_utils.VMN_LOGGER.debug(
-            f"\n{bold_char}Command line: {' '.join(command_line)}{end_char}"
+            f"\n{stamp_utils.BOLD_CHAR}Command line: {' '.join(command_line)}{stamp_utils.END_CHAR}"
         )
 
         # Call the actual function
@@ -2974,6 +2949,10 @@ def vmn_run(command_line=None):
     except:
         stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
         err = 1
+
+    stamp_utils.VMN_LOGGER.debug("Logged exception: ", exc_info=True)
+
+    stamp_utils.VMN_LOGGER.debug(pformat(stamp_utils.call_count))
 
     return err, vmnc
 

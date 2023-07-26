@@ -79,6 +79,9 @@ VMN_TEMPLATE_REGEX = (
     r"(?:\[(?P<buildmetadata_template>[^\{\}]*\{buildmetadata\}[^\{\}]*)\])?$"
 )
 
+BOLD_CHAR = "\033[1m"
+END_CHAR = "\033[0m"
+
 RELATIVE_TO_CURRENT_VCS_POSITION_TYPE = "current"
 RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE = "branch"
 RELATIVE_TO_GLOBAL_TYPE = "global"
@@ -97,7 +100,7 @@ def custom_execute(self, *args, **kwargs):
 
     if VMN_LOGGER is not None:
         VMN_LOGGER.debug(
-            f"{'  ' * (len(call_stack) - 1)}{' '.join(str(v) for v in args[0])}"
+            f"{BOLD_CHAR}{'  ' * (len(call_stack) - 1)}{' '.join(str(v) for v in args[0])}{END_CHAR}"
         )
 
     original_execute = getattr(self.__class__, "_execute")
@@ -142,6 +145,7 @@ git.cmd.Git.execute = custom_execute
 
 # Maintain a stack to keep track of nested function calls
 call_stack = []
+call_count = {}
 
 
 def measure_runtime_decorator(func):
@@ -149,6 +153,10 @@ def measure_runtime_decorator(func):
     def wrapper(*args, **kwargs):
         global call_stack
         global VMN_LOGGER
+
+        if func.__name__ not in call_count:
+            call_count[func.__name__] = 0
+        call_count[func.__name__] += 1
 
         call_stack.append(func.__name__)
         fcode = func.__code__
@@ -167,7 +175,7 @@ def measure_runtime_decorator(func):
 
         if VMN_LOGGER is not None:
             VMN_LOGGER.debug(
-                f"{'  ' * (len(call_stack) - 1)}<-- Exiting {func.__name__} took {elapsed_time:.6f} seconds at {fcode.co_filename}:{fcode.co_firstlineno}"
+                f"{'  ' * (len(call_stack) - 1)}<-- Exiting {func.__name__} {BOLD_CHAR} took {elapsed_time:.6f} seconds {END_CHAR} at {fcode.co_filename}:{fcode.co_firstlineno}"
             )
 
         call_stack.pop()
@@ -374,7 +382,6 @@ class VMNBackend(object):
         return "/".join(root_app_name[:-1])
 
     @staticmethod
-    @measure_runtime_decorator
     def serialize_vmn_tag_name(
         app_name,
         verstr,
@@ -573,7 +580,6 @@ class VMNBackend(object):
         return ret
 
     @staticmethod
-    @measure_runtime_decorator
     def deserialize_vmn_tag_name(vmn_tag):
         try:
             return VMNBackend.deserialize_tag_name(vmn_tag)
@@ -1599,7 +1605,6 @@ class GitBackend(VMNBackend):
         except Exception:
             VMN_LOGGER.info("Failed to fetch tags")
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
-
 
     @measure_runtime_decorator
     def get_tag_version_info(self, tag_name):
