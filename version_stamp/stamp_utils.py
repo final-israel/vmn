@@ -21,7 +21,8 @@ VMN_VERSION_FORMAT = (
     "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}][.{rcn}][+{buildmetadata}]"
 )
 VMN_DEFAULT_TEMPLATE = (
-    "[{major}][.{minor}][.{patch}][.{hotfix}]" "[-{prerelease}][.{rcn}][+{buildmetadata}]"
+    "[{major}][.{minor}][.{patch}][.{hotfix}]"
+    "[-{prerelease}][.{rcn}][+{buildmetadata}]"
 )
 
 _DIGIT_REGEX = r"0|[1-9]\d*"
@@ -31,7 +32,9 @@ _SEMVER_BASE_VER_REGEX = (
 )
 
 _SEMVER_PRERELEASE_REGEX = rf"(?:-(?P<prerelease>(?:{_DIGIT_REGEX}|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:{_DIGIT_REGEX}|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
-_VMN_PRERELEASE_REGEX = rf"{_SEMVER_PRERELEASE_REGEX[:-2]}\.(?P<rcn>(?:{_DIGIT_REGEX})))?"
+_VMN_PRERELEASE_REGEX = (
+    rf"{_SEMVER_PRERELEASE_REGEX[:-2]}\.(?P<rcn>(?:{_DIGIT_REGEX})))?"
+)
 SEMVER_BUILDMETADATA_REGEX = (
     r"(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?"
 )
@@ -360,10 +363,10 @@ class VMNBackend(object):
                 and template[f"{octat}_template"] is not None
             ):
                 d = {octat: props[octat]}
-                if 'rcn' in d and props['old_ver_format']:
+                if "rcn" in d and props["old_ver_format"]:
                     continue
 
-                if 'prerelease' in d and d['prerelease'] == 'release':
+                if "prerelease" in d and d["prerelease"] == "release":
                     continue
 
                 formatted_version = (
@@ -391,11 +394,9 @@ class VMNBackend(object):
 
         try:
             props = VMNBackend.deserialize_tag_name(tag_name)
-            if props['hotfix'] == 0:
+            if props["hotfix"] == 0:
                 # tags are always without zero hotfix
-                verstr = VMNBackend.serialize_vmn_version(
-                    verstr, hide_zero_hotfix=True
-                )
+                verstr = VMNBackend.serialize_vmn_version(verstr, hide_zero_hotfix=True)
                 tag_name = f"{tag_app_name}_{verstr}"
                 props = VMNBackend.deserialize_tag_name(tag_name)
         except Exception as exc:
@@ -412,20 +413,20 @@ class VMNBackend(object):
         prerelease=None,
         rcn=None,
         buildmetadata=None,
-        hide_zero_hotfix=False
+        hide_zero_hotfix=False,
     ):
         props = VMNBackend.deserialize_vmn_version(base_verstr)
         base_verstr = VMNBackend.serialize_vmn_base_version(
-            props['major'],
-            props['minor'],
-            props['patch'],
-            props['hotfix'],
-            hide_zero_hotfix=hide_zero_hotfix
+            props["major"],
+            props["minor"],
+            props["patch"],
+            props["hotfix"],
+            hide_zero_hotfix=hide_zero_hotfix,
         )
 
         vmn_version = base_verstr
 
-        if props['prerelease'] != "release":
+        if props["prerelease"] != "release":
             if prerelease is not None:
                 VMN_LOGGER.warning(
                     f"Tried to serialize verstr containing "
@@ -433,9 +434,9 @@ class VMNBackend(object):
                     f" another prerelease component. Will ignore it"
                 )
 
-            prerelease = props['prerelease']
+            prerelease = props["prerelease"]
             if not props["old_ver_format"]:
-                rcn = props['rcn']
+                rcn = props["rcn"]
 
         if props["buildmetadata"] is not None:
             if prerelease is not None:
@@ -445,7 +446,7 @@ class VMNBackend(object):
                     f" another buildmetadata component. Will ignore it"
                 )
 
-            buildmetadata = props['buildmetadata']
+            buildmetadata = props["buildmetadata"]
 
         if prerelease is not None:
             vmn_version = f"{vmn_version}-{prerelease}"
@@ -512,12 +513,10 @@ class VMNBackend(object):
 
             ret["app_name"] = VMNBackend.tag_name_to_app_name(gdict["app_name"])
 
-        res = VMNBackend.app_name_to_tag_name(ret['app_name'])
-        ret['verstr'] = some_tag.split(f"{res}_")[1]
+        res = VMNBackend.app_name_to_tag_name(ret["app_name"])
+        ret["verstr"] = some_tag.split(f"{res}_")[1]
 
-        ret.update(
-            VMNBackend.deserialize_vmn_version(ret['verstr'])
-        )
+        ret.update(VMNBackend.deserialize_vmn_version(ret["verstr"]))
 
         return ret
 
@@ -684,7 +683,7 @@ class LocalFileBackend(VMNBackend):
                     tag_name: {
                         "ver_info": None,
                         "tag_object": None,
-                        "commit_object": None
+                        "commit_object": None,
                     }
                 }
                 ver_infos[tag_name]["ver_info"] = yaml.safe_load(f)
@@ -695,16 +694,14 @@ class LocalFileBackend(VMNBackend):
 
     @measure_runtime_decorator
     def get_latest_stamp_tags(
-            self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
+        self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root_context:
-            dir_path = os.path.join(
-                self.repo_path, ".vmn", app_name, "root_verinfo"
-            )
+            dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
         else:
             dir_path = os.path.join(self.repo_path, ".vmn", app_name, "verinfo")
 
-        files = glob.glob(os.path.join(dir_path, '*'))
+        files = glob.glob(os.path.join(dir_path, "*"))
 
         # sort the files by modification date
         files.sort(key=os.path.getmtime, reverse=True)
@@ -719,16 +716,13 @@ class LocalFileBackend(VMNBackend):
                 else:
                     ver = data["stamping"]["app"]["_version"]
 
-                tag_name = VMNBackend.serialize_vmn_tag_name(
-                    app_name,
-                    ver
-                )
+                tag_name = VMNBackend.serialize_vmn_tag_name(app_name, ver)
                 tag_names.append(tag_name)
                 ver_infos = {
                     tag_name: {
                         "ver_info": None,
                         "tag_object": None,
-                        "commit_object": None
+                        "commit_object": None,
                     }
                 }
                 ver_infos[tag_name]["ver_info"] = data
@@ -846,10 +840,28 @@ class GitBackend(VMNBackend):
                 continue
 
             try:
-                ret = self._be.git.execute(["git", "push", "--porcelain", "-o", "ci.skip", self.selected_remote.name, f"refs/tags/{tag}"])
+                ret = self._be.git.execute(
+                    [
+                        "git",
+                        "push",
+                        "--porcelain",
+                        "-o",
+                        "ci.skip",
+                        self.selected_remote.name,
+                        f"refs/tags/{tag}",
+                    ]
+                )
             except Exception as exc:
                 try:
-                    self._be.git.execute(["git", "push", "--porcelain", self.selected_remote.name, f"refs/tags/{tag}"])
+                    self._be.git.execute(
+                        [
+                            "git",
+                            "push",
+                            "--porcelain",
+                            self.selected_remote.name,
+                            f"refs/tags/{tag}",
+                        ]
+                    )
                 except Exception as exc:
                     tag_err_str = f"Failed to tag {tag}. Reverting.."
                     VMN_LOGGER.error(tag_err_str)
@@ -878,8 +890,13 @@ class GitBackend(VMNBackend):
         try:
             ret = self._be.git.execute(
                 [
-                    "git", "push", "--porcelain", "-o", "ci.skip", self.selected_remote.name,
-                    f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}"
+                    "git",
+                    "push",
+                    "--porcelain",
+                    "-o",
+                    "ci.skip",
+                    self.selected_remote.name,
+                    f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}",
                 ]
             )
         except Exception as exc:
@@ -890,8 +907,8 @@ class GitBackend(VMNBackend):
                         "push",
                         "--porcelain",
                         self.selected_remote.name,
-                        f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}"
-                     ]
+                        f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}",
+                    ]
                 )
             except Exception as exc:
                 err_str = "Push has failed. Please verify that 'git push' works"
@@ -908,7 +925,7 @@ class GitBackend(VMNBackend):
                         "-o",
                         "ci.skip",
                         self.selected_remote.name,
-                        f"refs/tags/{tag}"
+                        f"refs/tags/{tag}",
                     ]
                 )
             except Exception:
@@ -918,7 +935,7 @@ class GitBackend(VMNBackend):
                         "push",
                         "--porcelain",
                         self.selected_remote.name,
-                        f"refs/tags/{tag}"
+                        f"refs/tags/{tag}",
                     ]
                 )
 
@@ -1570,12 +1587,15 @@ class GitBackend(VMNBackend):
                     for f in files:
                         self._be.git.reset(f)
                 except Exception as exc:
-                    VMN_LOGGER.debug(f"Failed to git reset files: {files}", exc_info=True)
+                    VMN_LOGGER.debug(
+                        f"Failed to git reset files: {files}", exc_info=True
+                    )
 
                 self._be.index.checkout(files, force=True)
             except Exception as exc:
-                VMN_LOGGER.debug(f"Failed to git checkout files: {files}", exc_info=True)
-
+                VMN_LOGGER.debug(
+                    f"Failed to git checkout files: {files}", exc_info=True
+                )
 
     @measure_runtime_decorator
     def revert_vmn_commit(self, prev_changeset, version_files, tags=[]):
