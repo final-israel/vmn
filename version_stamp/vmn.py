@@ -1584,9 +1584,14 @@ def handle_stamp(vmn_ctx):
         verstr, prerelease_count = vmn_ctx.vcs.advance_version(
             initial_version, vmn_ctx.vcs.optional_release_mode, globally=False
         )
-        base_verstr = stamp_utils.VMNBackend.get_base_vmn_version(
-            verstr, hide_zero_hotfix=vmn_ctx.vcs.hide_zero_hotfix
-        )
+        try:
+            base_verstr = stamp_utils.VMNBackend.get_base_vmn_version(
+                verstr, hide_zero_hotfix=vmn_ctx.vcs.hide_zero_hotfix
+            )
+        except stamp_utils.WrongTagFormatException as e:
+            stamp_utils.VMN_LOGGER.debug(f"Logged Exception message: {e}", exc_info=True)
+
+            return 1
         tag_name_prefix = f"{stamp_utils.VMNBackend.serialize_vmn_tag_name(vmn_ctx.vcs.name, base_verstr)}*"
         tag = vmn_ctx.vcs.backend.get_latest_available_tag(tag_name_prefix)
         if tag is not None and len(tag) < len(tag_name_prefix):

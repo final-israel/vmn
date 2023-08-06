@@ -3585,15 +3585,11 @@ def test_rc_from_rc_latest_stable(app_layout, capfd):
     first_branch = app_layout._app_backend.be.get_active_branch()
     app_layout.checkout(main_branch, create_new=True)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-    
-    err, ver_info, _ = _stamp_app(
-        app_layout.app_name, "patch"
-    )
+    err, ver_info, _ = _release_app(app_layout.app_name, "0.0.2-rc.1")
+
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"0.0.2"
-    assert data["prerelease"] == "rc"
 
     # Actual Test
     app_layout.checkout(first_branch, create_new=True)
@@ -3683,7 +3679,7 @@ def test_orm_rc_finished_with_comma(app_layout, capfd):
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"0.0.2-rc.1"
-    assert data["prerelease"] == "rc."
+    assert data["prerelease"] == "rc"
 
 def test_pr_rc_finished_with_comma(app_layout, capfd):
     _run_vmn_init()
@@ -3701,7 +3697,7 @@ def test_pr_rc_finished_with_comma(app_layout, capfd):
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"0.0.2-rc.1"
-    assert data["prerelease"] == "rc."
+    assert data["prerelease"] == "rc"
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
 
@@ -3711,7 +3707,7 @@ def test_pr_rc_finished_with_comma(app_layout, capfd):
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"0.0.2-rc.2"
-    assert data["prerelease"] == "rc."
+    assert data["prerelease"] == "rc"
 
 def test_use_override_in_rc(app_layout, capfd):
     _run_vmn_init()
@@ -3801,7 +3797,10 @@ def test_orm_rc_with_strange_name_hyphen(app_layout, capfd):
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, optional_release_mode="patch", prerelease="rc-1"
     )
-    assert err == 1
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc-1.1"
+    assert data["prerelease"] == "rc-1"
 
 def test_orm_rc_with_strange_name_underscore(app_layout, capfd):
     _run_vmn_init()
@@ -3816,7 +3815,4 @@ def test_orm_rc_with_strange_name_underscore(app_layout, capfd):
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, optional_release_mode="patch", prerelease="rc_1"
     )
-    assert err == 0
-    data = ver_info["stamping"]["app"]
-    assert data["_version"] == f"0.0.2-rc_1.1"
-    assert data["prerelease"] == "rc_1"
+    assert err == 1
