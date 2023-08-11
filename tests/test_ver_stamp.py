@@ -55,9 +55,18 @@ def _release_app(app_name, version=None):
     ret, vmn_ctx = vmn.vmn_run(cmd)
 
     vmn_ctx.vcs.initialize_backend_attrs()
-    tag_name, ver_infos = vmn_ctx.vcs.get_first_reachable_version_info(
-        app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
-    )
+
+    if version is None:
+        tag_name, ver_infos = vmn_ctx.vcs.get_first_reachable_version_info(
+            app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+        )
+    else:
+        tag_name, ver_infos = vmn_ctx.vcs.get_version_info_from_verstr(
+            stamp_utils.VMNBackend.get_base_vmn_version(
+                version,
+                hide_zero_hotfix=vmn_ctx.vcs.hide_zero_hotfix
+            )
+        )
 
     vmn_ctx.vcs.enhance_ver_info(ver_infos)
 
@@ -3564,42 +3573,51 @@ def test_rc_from_stable_latest_same_rc(app_layout, capfd):
     assert data["_version"] == f"0.0.2-rc.2"
     assert data["prerelease"] == "rc"
 
+
 def test_rc_from_rc_latest_stable(app_layout, capfd):
-    #Prepare
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(app_layout.app_name, "patch")
 
     main_branch = app_layout._app_backend.be.get_active_branch()
 
-    app_layout.checkout("first_branch", create_new=True)
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-    
-    err, ver_info, _ = _stamp_app(
-        app_layout.app_name, optional_release_mode="patch", prerelease="rc"
-    )
-    assert err == 0
-    data = ver_info["stamping"]["app"]
-    assert data["_version"] == f"0.0.2-rc.1"
-    assert data["prerelease"] == "rc"
-    first_branch = app_layout._app_backend.be.get_active_branch()
-    app_layout.checkout(main_branch, create_new=True)
+    first_branch = "first_branch"
+    second_branch = "second_branch"
 
-    err, ver_info, _ = _release_app(app_layout.app_name, "0.0.2-rc.1")
+    branches = [first_branch, second_branch]
+    for i in range(len(branches)):
+        app_layout.checkout(branches[i], create_new=True)
+        app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+        err, ver_info, _ = _stamp_app(
+            app_layout.app_name,
+            optional_release_mode="patch",
+            prerelease=f"rc{i}",
+        )
+        assert err == 0
+
+        data = ver_info["stamping"]["app"]
+        assert data["_version"] == f"0.0.2-rc{i}.1"
+        assert data["prerelease"] == f"rc{i}"
+
+        app_layout.checkout(main_branch)
+
+    err, ver_info, _ = _release_app(app_layout.app_name, "0.0.2-rc1.1")
 
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"0.0.2"
 
     # Actual Test
-    app_layout.checkout(first_branch, create_new=True)
-    app_layout.checkout("second_branch", create_new=True)
+    app_layout.checkout(second_branch, create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
     
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, optional_release_mode="patch", prerelease="rc"
     )
     assert err == 1
+
+
 
 def test_rc_from_rc_latest_other_rc(app_layout, capfd):
     #Prepare
