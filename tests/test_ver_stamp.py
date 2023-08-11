@@ -3816,3 +3816,33 @@ def test_orm_rc_with_strange_name_underscore(app_layout, capfd):
         app_layout.app_name, optional_release_mode="patch", prerelease="rc_1"
     )
     assert err == 1
+
+def test_problem_with_rc3_not_repreduced(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    app_layout.stamp_with_previous_vmn("0.8.5-rc3")
+
+    capfd.readouterr()
+    err, ver_info, _ = _stamp_app("app1", "major")
+    captured = capfd.readouterr()
+    assert err == 0
+    assert "[INFO] 0.0.3\n" == captured.out
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    err, ver_info, _ = _stamp_app("app1", "patch")
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.4"
+
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc_1"
+    )
+    assert err == 1
