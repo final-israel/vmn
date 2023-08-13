@@ -451,10 +451,7 @@ class VMNBackend(object):
             vmn_version = f"{vmn_version}-{prerelease}"
 
             if rcn is not None:
-                if vmn_version[-1] is not '.':
-                    vmn_version = f"{vmn_version}.{rcn}"
-                else:
-                    vmn_version = f"{vmn_version}{rcn}"
+                vmn_version = f"{vmn_version}.{rcn}"
 
         if buildmetadata is not None:
             vmn_version = f"{vmn_version}+{buildmetadata}"
