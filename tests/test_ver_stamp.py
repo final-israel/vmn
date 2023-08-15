@@ -55,9 +55,18 @@ def _release_app(app_name, version=None):
     ret, vmn_ctx = vmn.vmn_run(cmd)
 
     vmn_ctx.vcs.initialize_backend_attrs()
-    tag_name, ver_infos = vmn_ctx.vcs.get_first_reachable_version_info(
-        app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
-    )
+
+    if version is None:
+        tag_name, ver_infos = vmn_ctx.vcs.get_first_reachable_version_info(
+            app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+        )
+    else:
+        tag_name, ver_infos = vmn_ctx.vcs.get_version_info_from_verstr(
+            stamp_utils.VMNBackend.get_base_vmn_version(
+                version,
+                hide_zero_hotfix=vmn_ctx.vcs.hide_zero_hotfix
+            )
+        )
 
     vmn_ctx.vcs.enhance_ver_info(ver_infos)
 
@@ -3403,8 +3412,8 @@ def test_rc_after_release(app_layout, capfd):
 
     err, ver_info, _ = _release_app(app_layout.app_name, f"1.3.0-rc.2")
     data = ver_info["stamping"]["app"]
-    assert data["_version"] == f"1.3.0-rc.{i + 2}"
-    assert data["prerelease"] == "rc"
+    assert data["_version"] == f"1.3.0"
+    assert data["prerelease"] == "release"
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
@@ -3478,3 +3487,453 @@ def test_jenkins_checkout(app_layout, capfd):
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
+
+def test_orm_rc_from_release(app_layout, capfd):
+    #Prepare
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    
+    # Actual Test 
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.1"
+    assert data["prerelease"] == "rc"
+
+
+def test_orm_rc_from_release_globally_latest_other_rc(app_layout, capfd):
+    #Prepare
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc1"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc1.1"
+    assert data["prerelease"] == "rc1"
+
+    # Actual Test
+    app_layout.checkout(main_branch)
+    app_layout.checkout("second_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc2"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc2.1"
+    assert data["prerelease"] == "rc2"
+
+
+def test_orm_rc_from_release_globally_latest_same_rc(app_layout, capfd):
+    #Prepare
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.1"
+    assert data["prerelease"] == "rc"
+
+    # Actual Test
+    app_layout.checkout(main_branch)
+    app_layout.checkout("second_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.2"
+    assert data["prerelease"] == "rc"
+
+
+def test_orm_rc_from_rc_globally_latest_release(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    first_branch = "first_branch"
+    second_branch = "second_branch"
+
+    branches = [first_branch, second_branch]
+    for i in range(len(branches)):
+        app_layout.checkout(branches[i], create_new=True)
+        app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+        err, ver_info, _ = _stamp_app(
+            app_layout.app_name,
+            optional_release_mode="patch",
+            prerelease=f"rc{i}",
+        )
+        assert err == 0
+
+        data = ver_info["stamping"]["app"]
+        assert data["_version"] == f"0.0.2-rc{i}.1"
+        assert data["prerelease"] == f"rc{i}"
+
+        app_layout.checkout(main_branch)
+
+    err, ver_info, _ = _release_app(app_layout.app_name, "0.0.2-rc0.1")
+
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2"
+
+    # Actual Test
+    app_layout.checkout(second_branch)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc"
+    )
+    assert err == 1
+
+
+
+def test_orm_rc_from_rc_globally_latest_other_rc(app_layout, capfd):
+    #Prepare
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc1"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc1.1"
+    assert data["prerelease"] == "rc1"
+
+    # Actual Test
+    app_layout.checkout("second_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc2"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc2.1"
+    assert data["prerelease"] == "rc2"
+
+def test_orm_rc_from_rc_globally_latest_same_rc(app_layout, capfd):
+    #Prepare
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.1"
+    assert data["prerelease"] == "rc"
+
+    # Actual Test
+    app_layout.checkout("second_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.2"
+    assert data["prerelease"] == "rc"
+
+def test_orm_rc_ending_with_dot(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc."
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.1"
+    assert data["prerelease"] == "rc"
+
+def test_pr_rc_ending_with_dot(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc."
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.1"
+    assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, prerelease="rc."
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.2"
+    assert data["prerelease"] == "rc"
+
+def test_orm_use_override_in_rc(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.1"
+    assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, override_version="1.0.0", optional_release_mode="patch", prerelease="rc"
+    )
+
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"1.0.1-rc.1"
+    assert data["prerelease"] == "rc"
+
+
+def test_orm_use_override_rc_in_rc(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.1"
+    assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, override_version="1.0.1-rc.1", optional_release_mode="patch", prerelease="rc"
+    )
+
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"1.0.1-rc.2"
+    assert data["prerelease"] == "rc"
+
+
+def test_orm_use_override_diff_rc_in_rc(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.1"
+    assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, override_version="1.0.1-rc1.1", optional_release_mode="patch", prerelease="rc2"
+    )
+
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"1.0.1-rc2.1"
+    assert data["prerelease"] == "rc2"
+
+
+def test_orm_use_override_in_stable(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.1"
+    assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, "patch", override_version="1.0.0"
+    )
+
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"1.0.1"
+
+def test_orm_rc_with_strange_name_dot(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc.1"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.1.1"
+    assert data["prerelease"] == "rc.1"
+
+def test_orm_rc_with_strange_name_hyphen(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc-1"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc-1.1"
+    assert data["prerelease"] == "rc-1"
+
+def test_orm_rc_with_strange_name_underscore(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc_1"
+    )
+    assert err == 1
+
+def test_jenkins_checkout(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    app_layout.checkout("new_branch", create_new=True)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    app_layout.checkout_jekins(main_branch)
+
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
+
+def test_orm_rc_with_strange_name_underscore(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc_1"
+    )
+    assert err == 1
+
+def test_problem_found_in_real_customer(app_layout, capfd):
+    app_layout.stamp_with_previous_vmn("0.8.5rc2")
+
+    err, ver_info, _ = _stamp_app(
+        'app1', optional_release_mode="patch", prerelease="189."
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"2.3.2-189.1"
+    assert data["prerelease"] == "189"

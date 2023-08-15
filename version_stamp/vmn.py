@@ -411,7 +411,8 @@ class IVersionsStamper(object):
             self.props_from_file,
         ) = self.get_version_number_from_file()
 
-        # verstr_from_file will be None only when running for the first time or file removed somehow
+        # verstr_from_file will be None only when running
+        # for the first time or file removed somehow
         if self.verstr_from_file is not None:
             (
                 self.selected_tag,
@@ -1506,6 +1507,10 @@ def handle_stamp(vmn_ctx):
     if vmn_ctx.vcs.release_mode == "micro":
         vmn_ctx.vcs.release_mode = "hotfix"
 
+    if vmn_ctx.vcs.prerelease and vmn_ctx.vcs.prerelease[-1] is '.':
+        vmn_ctx.vcs.prerelease = vmn_ctx.vcs.prerelease[:-1]
+
+
     assert vmn_ctx.vcs.release_mode is None or vmn_ctx.vcs.optional_release_mode is None
 
     if vmn_ctx.vcs.override_version is not None:
@@ -1567,35 +1572,42 @@ def handle_stamp(vmn_ctx):
 
             return 1
 
-    initial_version = vmn_ctx.vcs.verstr_from_file
-    tprops = stamp_utils.VMNBackend.deserialize_tag_name(vmn_ctx.vcs.selected_tag)
-    if tprops["verstr"] in initial_version:
-        initial_version = tprops["verstr"]
-
-    if vmn_ctx.vcs.override_version:
-        initial_version = vmn_ctx.vcs.override_version
+    initial_version = _determine_initial_version(vmn_ctx)
 
     props = stamp_utils.VMNBackend.deserialize_vmn_version(initial_version)
-    is_release = props["prerelease"] == "release"
+    is_from_release = props["prerelease"] == "release"
 
     # optional_release_mode should advance only in case the starting_from
     # version is release, otherwise it should be ignored
-    if vmn_ctx.vcs.optional_release_mode and is_release:
+    if vmn_ctx.vcs.optional_release_mode and is_from_release:
         verstr, prerelease_count = vmn_ctx.vcs.advance_version(
             initial_version, vmn_ctx.vcs.optional_release_mode, globally=False
         )
-        base_verstr = stamp_utils.VMNBackend.get_base_vmn_version(
-            verstr, hide_zero_hotfix=vmn_ctx.vcs.hide_zero_hotfix
+
+        try:
+            base_verstr = stamp_utils.VMNBackend.get_base_vmn_version(
+                verstr, hide_zero_hotfix=vmn_ctx.vcs.hide_zero_hotfix
+            )
+        except stamp_utils.WrongTagFormatException as e:
+            stamp_utils.VMN_LOGGER.debug(f"Logged Exception message: {e}", exc_info=True)
+
+            return 1
+
+        release_tag_name = stamp_utils.VMNBackend.serialize_vmn_tag_name(
+            vmn_ctx.vcs.name,
+            base_verstr
         )
-        tag_name_prefix = f"{stamp_utils.VMNBackend.serialize_vmn_tag_name(vmn_ctx.vcs.name, base_verstr)}*"
+
+        tag_name_prefix = f"{release_tag_name}*"
         tag = vmn_ctx.vcs.backend.get_latest_available_tag(tag_name_prefix)
-        if tag is not None and len(tag) < len(tag_name_prefix):
-            # Means we found a release version but no prerelease
+
+        _, ver_infos = vmn_ctx.vcs.backend.get_tag_version_info(release_tag_name)
+        if ver_infos:
             tag = None
 
-        if not tag:
-            # If the version we're going towards to does not exist or
-            # exist but already released, act as if release_mode was specified
+        if tag is None:
+            # If the version we're going towards to does not exist,
+            # act as if release_mode was specified
             vmn_ctx.vcs.release_mode = vmn_ctx.vcs.optional_release_mode
         else:
             # In case some prerelease version exists, we want to
@@ -1639,6 +1651,20 @@ def handle_stamp(vmn_ctx):
         stamp_utils.VMN_LOGGER.info(f"{disp_version}")
 
     return 0
+
+
+def _determine_initial_version(vmn_ctx):
+    initial_version = vmn_ctx.vcs.verstr_from_file
+    base_ver = stamp_utils.VMNBackend.get_base_vmn_version(
+        initial_version,
+        vmn_ctx.vcs.hide_zero_hotfix,
+    )
+    t = vmn_ctx.vcs.get_tag_name(base_ver)
+    if t == vmn_ctx.vcs.selected_tag:
+        initial_version = base_ver
+    if vmn_ctx.vcs.override_version:
+        initial_version = vmn_ctx.vcs.override_version
+    return initial_version
 
 
 @stamp_utils.measure_runtime_decorator
