@@ -3682,7 +3682,7 @@ def test_orm_rc_from_rc_globally_latest_same_rc(app_layout, capfd):
     assert data["_version"] == f"0.0.2-rc.2"
     assert data["prerelease"] == "rc"
 
-def test_orm_rc_finished_with_comma(app_layout, capfd):
+def test_orm_rc_ending_with_dot(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(app_layout.app_name, "patch")
