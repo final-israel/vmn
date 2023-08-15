@@ -3927,7 +3927,7 @@ def test_orm_rc_with_strange_name_underscore(app_layout, capfd):
     )
     assert err == 1
 
-def test_problem_found_in_fabric(app_layout, capfd):
+def test_problem_found_in_real_customer(app_layout, capfd):
     app_layout.stamp_with_previous_vmn("0.8.5rc2")
 
     err, ver_info, _ = _stamp_app(
