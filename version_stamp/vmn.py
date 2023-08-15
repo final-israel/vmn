@@ -1507,7 +1507,7 @@ def handle_stamp(vmn_ctx):
     if vmn_ctx.vcs.release_mode == "micro":
         vmn_ctx.vcs.release_mode = "hotfix"
 
-    if vmn_ctx.vcs.prerelease and vmn_ctx.vcs.prerelease[-1] is '.':
+    if vmn_ctx.vcs.prerelease and vmn_ctx.vcs.prerelease[-1] == '.':
         vmn_ctx.vcs.prerelease = vmn_ctx.vcs.prerelease[:-1]
 
 
