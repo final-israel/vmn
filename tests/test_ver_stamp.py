@@ -3488,7 +3488,7 @@ def test_jenkins_checkout(app_layout, capfd):
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
 
-def test_rc_from_stable_latest_stable(app_layout, capfd):
+def test_rc_from_release(app_layout, capfd):
     #Prepare
     _run_vmn_init()
     _init_app(app_layout.app_name)
