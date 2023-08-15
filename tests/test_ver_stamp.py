@@ -3412,8 +3412,8 @@ def test_rc_after_release(app_layout, capfd):
 
     err, ver_info, _ = _release_app(app_layout.app_name, f"1.3.0-rc.2")
     data = ver_info["stamping"]["app"]
-    assert data["_version"] == f"1.3.0-rc.{i + 2}"
-    assert data["prerelease"] == "rc"
+    assert data["_version"] == f"1.3.0"
+    assert data["prerelease"] == "release"
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
@@ -3609,7 +3609,7 @@ def test_rc_from_rc_latest_stable(app_layout, capfd):
     assert data["_version"] == f"0.0.2"
 
     # Actual Test
-    app_layout.checkout(second_branch, create_new=True)
+    app_layout.checkout(second_branch)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
     
     err, ver_info, _ = _stamp_app(
@@ -3948,6 +3948,7 @@ def test_rc_from_rc_latest_stable(app_layout, capfd):
 
     branches = [first_branch, second_branch]
     for i in range(len(branches)):
+        app_layout.checkout(main_branch)
         app_layout.checkout(branches[i], create_new=True)
         app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
 
@@ -3962,24 +3963,23 @@ def test_rc_from_rc_latest_stable(app_layout, capfd):
         assert data["_version"] == f"0.0.2-rc{i}.1"
         assert data["prerelease"] == f"rc{i}"
 
-        app_layout.checkout(main_branch)
-
-    err, ver_info, _ = _release_app(app_layout.app_name, "0.0.2-rc1.1")
+    err, ver_info, _ = _release_app(app_layout.app_name, "0.0.2-rc0.1")
 
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"0.0.2"
 
     # Actual Test
-    app_layout.checkout(second_branch, create_new=True)
+    app_layout.checkout(second_branch)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-    
+
+    capfd.readouterr()
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, optional_release_mode="patch", prerelease="rc"
     )
+    captured = capfd.readouterr()
     assert err == 1
-
-
+    assert captured.err == "[ERROR] The version 0.0.2 was already released. Will refuse to stamp prerelease version\n"
 
 def test_rc_from_rc_latest_other_rc(app_layout, capfd):
     #Prepare
