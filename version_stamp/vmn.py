@@ -272,7 +272,7 @@ class IVersionsStamper(object):
 
             try:
                 props = stamp_utils.VMNBackend.deserialize_vmn_version(verstr)
-            except Exception as exc:
+            except Exception:
                 err = (
                     f"Version in version file: {verstr} doesn't comply with: "
                     f"{stamp_utils.VMN_VERSION_FORMAT} format"
@@ -349,8 +349,8 @@ class IVersionsStamper(object):
         actual_tag = self.get_tag_name(verstr)
 
         try:
-            props = stamp_utils.VMNBackend.deserialize_vmn_version(verstr)
-        except Exception as exc:
+            stamp_utils.VMNBackend.deserialize_vmn_version(verstr)
+        except Exception:
             stamp_utils.VMN_LOGGER.debug(exc_info=True)
             return actual_tag, {}
 
@@ -471,7 +471,7 @@ class IVersionsStamper(object):
         try:
             self.template = IVersionsStamper.parse_template(template)
             self.bad_format_template = False
-        except Exception as exc:
+        except Exception:
             stamp_utils.VMN_LOGGER.debug("Logged exception: ", exc_info=True)
             self.template = IVersionsStamper.parse_template(
                 stamp_utils.VMN_DEFAULT_TEMPLATE
@@ -944,7 +944,7 @@ class VersionControlStamper(IVersionsStamper):
 
         messages = [yaml.dump(ver_info, sort_keys=True)]
 
-        ret = self.backend.tag(
+        self.backend.tag(
             [release_tag_name],
             messages,
             ref=self.backend.changeset(tag=tag_name),
@@ -997,7 +997,7 @@ class VersionControlStamper(IVersionsStamper):
         if buildmetadata_tag_name in tag_ver_infos:
             if tag_ver_infos[buildmetadata_tag_name]["ver_info"] != ver_info:
                 stamp_utils.VMN_LOGGER.error(
-                    f"Tried to add different metadata for the same version."
+                    "Tried to add different metadata for the same version."
                 )
                 raise RuntimeError()
 
@@ -1234,11 +1234,11 @@ class VersionControlStamper(IVersionsStamper):
 
         try:
             self.publish_commit(version_files_to_add)
-        except Exception as exc:
+        except Exception:
             stamp_utils.VMN_LOGGER.debug("Logged Exception message: ", exc_info=True)
-            stamp_utils.VMN_LOGGER.info(f"Reverting vmn changes... ")
+            stamp_utils.VMN_LOGGER.info("Reverting vmn changes... ")
             if self.dry_run:
-                stamp_utils.VMN_LOGGER.info(f"Would have tried to revert a vmn commit")
+                stamp_utils.VMN_LOGGER.info("Would have tried to revert a vmn commit")
             else:
                 self.backend.revert_vmn_commit(prev_changeset, self.version_files)
 
@@ -1293,7 +1293,7 @@ class VersionControlStamper(IVersionsStamper):
                     )
                 else:
                     self.backend.tag([t], [yaml.dump(m, sort_keys=True)])
-        except Exception as exc:
+        except Exception:
             stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
             stamp_utils.VMN_LOGGER.info(f"Reverting vmn changes for tags: {tags} ... ")
             if self.dry_run:
@@ -1331,7 +1331,7 @@ class VersionControlStamper(IVersionsStamper):
                         f"BUG: Somehow we have outgoing changes right "
                         f"after publishing:\n{res}"
                     )
-        except Exception as exc:
+        except Exception:
             stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
             stamp_utils.VMN_LOGGER.info(f"Reverting vmn changes for tags: {tags} ...")
             if self.dry_run:
@@ -1352,7 +1352,7 @@ class VersionControlStamper(IVersionsStamper):
         cur_branch = self.backend.active_branch
         path = os.path.join(
             self.app_dir_path,
-            f"*_conf.yml",
+            "*_conf.yml",
         )
         list_of_files = glob.glob(path)
         branch_conf_path = os.path.join(self.app_dir_path, f"{cur_branch}_conf.yml")
@@ -1372,13 +1372,13 @@ class VersionControlStamper(IVersionsStamper):
             for f in set(list_of_files) - {branch_conf_path}:
                 try:
                     self.backend._be.index.remove([f], working_tree=True)
-                except Exception as exc:
+                except Exception:
                     pass
 
                 try:
                     f_to_rem = pathlib.Path(f)
                     f_to_rem.unlink()
-                except Exception as exc:
+                except Exception:
                     pass
 
             self.backend.commit(
@@ -1517,7 +1517,7 @@ def handle_stamp(vmn_ctx):
             props = stamp_utils.VMNBackend.deserialize_vmn_version(
                 vmn_ctx.vcs.override_version
             )
-        except Exception as exc:
+        except Exception:
             err = (
                 f"Provided override {vmn_ctx.vcs.override_version} doesn't comply with: "
                 f"{stamp_utils.VMN_VERSION_FORMAT} format"
@@ -1563,7 +1563,7 @@ def handle_stamp(vmn_ctx):
         try:
             vmn_ctx.vcs.backend.perform_cached_fetch(force=True)
             vmn_ctx.vcs.retrieve_remote_changes()
-        except Exception as exc:
+        except Exception:
             stamp_utils.VMN_LOGGER.error(
                 "Failed to pull, run with --debug for more details"
             )
@@ -1639,7 +1639,7 @@ def handle_stamp(vmn_ctx):
             vmn_ctx.args.check_vmn_version,
             initial_version,
         )
-    except Exception as exc:
+    except Exception:
         stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
         return 1
@@ -1726,7 +1726,7 @@ def handle_release(vmn_ctx):
             return 0
 
         stamp_utils.VMN_LOGGER.info(vmn_ctx.vcs.release_app_version(tag_name, ver_info))
-    except Exception as exc:
+    except Exception:
         stamp_utils.VMN_LOGGER.error(f"Failed to release {ver}")
         stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
@@ -1785,7 +1785,7 @@ def handle_add(vmn_ctx):
         stamp_utils.VMN_LOGGER.info(
             vmn_ctx.vcs.add_metadata_to_version(tag_name, ver_info)
         )
-    except Exception as exc:
+    except Exception:
         stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
         return 1
@@ -1818,8 +1818,8 @@ def handle_show(vmn_ctx):
     vmn_ctx.params["display_type"] = vmn_ctx.args.display_type
 
     try:
-        out = show(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
-    except Exception as exc:
+        show(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
+    except Exception:
         stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
         return 1
 
@@ -1834,8 +1834,8 @@ def handle_gen(vmn_ctx):
     vmn_ctx.params["custom_values"] = vmn_ctx.args.custom_values
 
     try:
-        out = gen(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
-    except Exception as exc:
+        gen(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
+    except Exception:
         stamp_utils.VMN_LOGGER.error("Failed to gen, run with --debug for more details")
         stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
         return 1
@@ -2001,7 +2001,7 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                         f"{vcs.configured_deps[repo]['branch']}"
                     )
                     assert branch_name == vcs.configured_deps[repo]["branch"]
-                except Exception as exc:
+                except Exception:
                     status["deps_synced_with_conf"] = False
                     status["err_msgs"][
                         "deps_synced_with_conf"
@@ -2021,7 +2021,7 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                     c1 = dep_be.changeset(tag=vcs.configured_deps[repo]["tag"])
                     c2 = dep_be.changeset()
                     assert c1 == c2
-                except Exception as exc:
+                except Exception:
                     status["deps_synced_with_conf"] = False
                     status["err_msgs"][
                         "deps_synced_with_conf"
@@ -2039,7 +2039,7 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                         f"for {repo}."
                     )
                     assert vcs.configured_deps[repo]["hash"] == dep_be.changeset()
-                except Exception as exc:
+                except Exception:
                     status["deps_synced_with_conf"] = False
                     status["err_msgs"][
                         "deps_synced_with_conf"
@@ -2145,7 +2145,7 @@ def _init_app(versions_be_ifc, starting_version):
 
     try:
         err = versions_be_ifc.publish_stamp(starting_version, root_app_version)
-    except Exception as exc:
+    except Exception:
         stamp_utils.VMN_LOGGER.debug("Logged Exception message: ", exc_info=True)
         versions_be_ifc.backend.revert_local_changes(versions_be_ifc.version_files)
         err = -1
@@ -2221,7 +2221,7 @@ def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr):
             time.sleep(random.randint(1, 5))
             try:
                 versions_be_ifc.retrieve_remote_changes()
-            except Exception as exc:
+            except Exception:
                 stamp_utils.VMN_LOGGER.error("Failed to pull", exc_info=True)
         else:
             break
@@ -2531,7 +2531,7 @@ def get_dirty_states(optional_status, status):
 
         if debug_msg:
             stamp_utils.VMN_LOGGER.debug(f"Debug for dirty states call:{debug_msg}")
-    except Exception as exc:
+    except Exception:
         stamp_utils.VMN_LOGGER.debug("Logged Exception message: ", exc_info=True)
         pass
 
@@ -2552,7 +2552,7 @@ def goto_version(vcs, params, version, pull):
             if pull:
                 try:
                     vcs.retrieve_remote_changes()
-                except Exception as exc:
+                except Exception:
                     stamp_utils.VMN_LOGGER.error(
                         "Failed to pull, run with --debug for more details"
                     )
@@ -2599,7 +2599,7 @@ def goto_version(vcs, params, version, pull):
         if not params["deps_only"] and pull:
             try:
                 vcs.retrieve_remote_changes()
-            except Exception as exc:
+            except Exception:
                 stamp_utils.VMN_LOGGER.error(
                     "Failed to pull, run with --debug for more details"
                 )
@@ -2629,7 +2629,7 @@ def goto_version(vcs, params, version, pull):
 
     if check_unique:
         if not deps["."]["hash"].startswith(unique_id):
-            stamp_utils.VMN_LOGGER.error(f"Wrong unique id")
+            stamp_utils.VMN_LOGGER.error("Wrong unique id")
             return 1
 
     deps.pop(".")
@@ -2651,7 +2651,7 @@ def goto_version(vcs, params, version, pull):
             _goto_version(deps, vcs.vmn_root_path, pull)
         except Exception as exc:
             stamp_utils.VMN_LOGGER.error(f"goto failed: {exc}")
-            stamp_utils.VMN_LOGGER.debug(f"", exc_info=True)
+            stamp_utils.VMN_LOGGER.debug("", exc_info=True)
 
             return 1
 
@@ -2680,7 +2680,7 @@ def _update_repo(args):
         # TODO:: why this is not an error?
         if client is None:
             return {"repo": rel_path, "status": 0, "description": err}
-    except Exception as exc:
+    except Exception:
         stamp_utils.VMN_LOGGER.exception(
             "Unexpected behaviour:\nAborting update " f"operation in {path} Reason:\n"
         )
@@ -2693,7 +2693,7 @@ def _update_repo(args):
             stamp_utils.VMN_LOGGER.info("{0}. Aborting update operation ".format(err))
             return {"repo": rel_path, "status": 1, "description": err}
 
-    except Exception as exc:
+    except Exception:
         stamp_utils.VMN_LOGGER.debug(f'Skipping "{path}"')
         stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
@@ -2715,7 +2715,7 @@ def _update_repo(args):
             try:
                 client.checkout_branch()
                 client.pull()
-            except Exception as exc:
+            except Exception:
                 stamp_utils.VMN_LOGGER.exception("Failed to pull:", exc_info=True)
                 return {"repo": rel_path, "status": 1, "description": "Failed to pull"}
 
@@ -2744,7 +2744,7 @@ def _update_repo(args):
             stamp_utils.VMN_LOGGER.info(
                 "Updated {0} to {1}".format(rel_path, changeset)
             )
-    except Exception as exc:
+    except Exception:
         stamp_utils.VMN_LOGGER.exception(
             f"Unexpected behaviour:\n"
             f"Trying to abort update operation in {path} "
@@ -2754,7 +2754,7 @@ def _update_repo(args):
 
         try:
             client.checkout(rev=cur_changeset)
-        except Exception as exc:
+        except Exception:
             stamp_utils.VMN_LOGGER.exception(
                 "Unexpected behaviour when tried to revert:", exc_info=True
             )
@@ -2900,7 +2900,7 @@ def vmn_run(command_line=None):
     try:
         stamp_utils.init_stamp_logger()
         args = parse_user_commands(command_line)
-    except Exception as exc:
+    except Exception:
         stamp_utils.VMN_LOGGER.debug("Logged exception: ", exc_info=True)
         return 1, None
 
@@ -2914,7 +2914,7 @@ def vmn_run(command_line=None):
         vmn_path = os.path.join(root_path, ".vmn")
         pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
 
-    except Exception as exc:
+    except Exception:
         stamp_utils.VMN_LOGGER.error(
             "Failed to init logger. "
             "Maybe you are running from a non-managed directory?"
@@ -2964,7 +2964,7 @@ def vmn_run(command_line=None):
         # the unlock will happen naturally because the process will exit
         lock.release()
 
-    except Exception as exc:
+    except Exception:
         stamp_utils.VMN_LOGGER.error(
             "vmn_run raised exception. Run vmn --debug for details"
         )
@@ -3070,9 +3070,9 @@ def add_arg_gen(subprasers):
         f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
     pgen.add_argument(
-        "-t", "--template", required=True, help=f"Path to the jinja2 template"
+        "-t", "--template", required=True, help="Path to the jinja2 template"
     )
-    pgen.add_argument("-o", "--output", required=True, help=f"Path for the output file")
+    pgen.add_argument("-o", "--output", required=True, help="Path for the output file")
     pgen.add_argument("--verify-version", dest="verify_version", action="store_true")
     pgen.set_defaults(verify_version=False)
     pgen.add_argument("name", help="The application's name")
@@ -3081,7 +3081,7 @@ def add_arg_gen(subprasers):
         "--custom-values",
         default=None,
         required=False,
-        help=f"Path to a yml file with custom keys and values",
+        help="Path to a yml file with custom keys and values",
     )
 
 
@@ -3258,13 +3258,13 @@ def add_arg_add(subprasers):
         "--vmp",
         "--version-metadata-path",
         required=False,
-        help=f"A path to a YML file which is associated with the specific build version",
+        help="A path to a YML file which is associated with the specific build version",
     )
     padd.add_argument(
         "--vmu",
         "--version-metadata-url",
         required=False,
-        help=f"A URL which is associated with the specific build version",
+        help="A URL which is associated with the specific build version",
     )
     padd.add_argument("name", help="The application's name")
 
@@ -3274,12 +3274,12 @@ def verify_user_input_version(args, key):
         return
 
     try:
-        props = stamp_utils.VMNBackend.deserialize_vmn_version(getattr(args, key))
-    except Exception as exc:
+        stamp_utils.VMNBackend.deserialize_vmn_version(getattr(args, key))
+    except Exception:
         if "root" not in args or not args.root:
             err = f"Version must be in format: {stamp_utils.VMN_VERSION_FORMAT}"
         else:
-            err = f"Root version must be an integer"
+            err = "Root version must be an integer"
 
         stamp_utils.VMN_LOGGER.error(err)
 

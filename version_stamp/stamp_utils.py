@@ -212,8 +212,8 @@ def resolve_root_path():
 
             exist = os.path.exists(os.path.join(root_path, ".git"))
             exist = exist or os.path.exists(os.path.join(root_path, ".vmn"))
-        except Exception as exc:
-            VMN_LOGGER.debug(f"Logged exception: ", exc_info=True)
+        except Exception:
+            VMN_LOGGER.debug("Logged exception: ", exc_info=True)
             root_path = None
             break
     if root_path is None:
@@ -285,7 +285,7 @@ def init_log_file_handler(rotating_log_path):
         backupCount=1,
     )
     rotating_file_handler.setLevel(logging.DEBUG)
-    fmt = f"[%(levelname)s] %(asctime)s %(pathname)s:%(lineno)d =>\n%(message)s"
+    fmt = "[%(levelname)s] %(asctime)s %(pathname)s:%(lineno)d =>\n%(message)s"
     formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
     rotating_file_handler.setFormatter(formatter)
     return rotating_file_handler
@@ -398,7 +398,7 @@ class VMNBackend(object):
                 verstr = VMNBackend.serialize_vmn_version(verstr, hide_zero_hotfix=True)
                 tag_name = f"{tag_app_name}_{verstr}"
                 props = VMNBackend.deserialize_tag_name(tag_name)
-        except Exception as exc:
+        except Exception:
             err = f"Tag {tag_name} doesn't comply with: " f"{VMN_TAG_REGEX} format"
             VMN_LOGGER.error(err)
 
@@ -428,9 +428,9 @@ class VMNBackend(object):
         if props["prerelease"] != "release":
             if prerelease is not None:
                 VMN_LOGGER.warning(
-                    f"Tried to serialize verstr containing "
-                    f"prerelease component but also tried to append"
-                    f" another prerelease component. Will ignore it"
+                    "Tried to serialize verstr containing "
+                    "prerelease component but also tried to append"
+                    " another prerelease component. Will ignore it"
                 )
 
             prerelease = props["prerelease"]
@@ -440,9 +440,9 @@ class VMNBackend(object):
         if props["buildmetadata"] is not None:
             if prerelease is not None:
                 VMN_LOGGER.warning(
-                    f"Tried to serialize verstr containing "
-                    f"buildmetadata component but also tried to append"
-                    f" another buildmetadata component. Will ignore it"
+                    "Tried to serialize verstr containing "
+                    "buildmetadata component but also tried to append"
+                    " another buildmetadata component. Will ignore it"
                 )
 
             buildmetadata = props["buildmetadata"]
@@ -686,7 +686,7 @@ class LocalFileBackend(VMNBackend):
                     }
                 }
                 ver_infos[tag_name]["ver_info"] = yaml.safe_load(f)
-        except Exception as exc:
+        except Exception:
             VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
         return tag_name, ver_infos
@@ -794,10 +794,10 @@ class GitBackend(VMNBackend):
     def get_repo_details(path):
         try:
             client = git.Repo(path, search_parent_directories=True)
-        except git.exc.InvalidGitRepositoryError as exc:
+        except git.exc.InvalidGitRepositoryError:
             VMN_LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
             return None
-        except Exception as exc:
+        except Exception:
             VMN_LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
             return None
 
@@ -806,7 +806,7 @@ class GitBackend(VMNBackend):
             remote = tuple(client.remotes[0].urls)[0]
             if os.path.isdir(remote):
                 remote = os.path.relpath(remote, client.working_dir)
-        except Exception as exc:
+        except Exception:
             VMN_LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
             return None
         finally:
@@ -819,7 +819,7 @@ class GitBackend(VMNBackend):
         try:
             self._be.git.execute(["git", "ls-files", "--error-unmatch", path])
             return True
-        except Exception as exc:
+        except Exception:
             VMN_LOGGER.debug(f"Logged exception for path {path}: ", exc_info=True)
             return False
 
@@ -833,13 +833,13 @@ class GitBackend(VMNBackend):
             # listing tags since the taggerdate field is in seconds resolution
             time.sleep(1.1)
 
-            ret = self._be.create_tag(tag, ref=ref, message=message)
+            self._be.create_tag(tag, ref=ref, message=message)
 
             if not push:
                 continue
 
             try:
-                ret = self._be.git.execute(
+                self._be.git.execute(
                     [
                         "git",
                         "push",
@@ -850,7 +850,7 @@ class GitBackend(VMNBackend):
                         f"refs/tags/{tag}",
                     ]
                 )
-            except Exception as exc:
+            except Exception:
                 try:
                     self._be.git.execute(
                         [
@@ -861,13 +861,13 @@ class GitBackend(VMNBackend):
                             f"refs/tags/{tag}",
                         ]
                     )
-                except Exception as exc:
+                except Exception:
                     tag_err_str = f"Failed to tag {tag}. Reverting.."
                     VMN_LOGGER.error(tag_err_str)
 
                     try:
                         self._be.delete_tag(tag)
-                    except Exception as exc:
+                    except Exception:
                         err_str = f"Failed to remove tag {tag}"
                         VMN_LOGGER.info(err_str)
                         VMN_LOGGER.debug("Exception info: ", exc_info=True)
@@ -887,7 +887,7 @@ class GitBackend(VMNBackend):
         )
 
         try:
-            ret = self._be.git.execute(
+            self._be.git.execute(
                 [
                     "git",
                     "push",
@@ -898,9 +898,9 @@ class GitBackend(VMNBackend):
                     f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}",
                 ]
             )
-        except Exception as exc:
+        except Exception:
             try:
-                ret = self._be.git.execute(
+                self._be.git.execute(
                     [
                         "git",
                         "push",
@@ -909,14 +909,14 @@ class GitBackend(VMNBackend):
                         f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}",
                     ]
                 )
-            except Exception as exc:
+            except Exception:
                 err_str = "Push has failed. Please verify that 'git push' works"
                 VMN_LOGGER.error(err_str, exc_info=True)
                 raise RuntimeError(err_str)
 
         for tag in tags:
             try:
-                ret = self._be.git.execute(
+                self._be.git.execute(
                     [
                         "git",
                         "push",
@@ -928,7 +928,7 @@ class GitBackend(VMNBackend):
                     ]
                 )
             except Exception:
-                ret = self._be.git.execute(
+                self._be.git.execute(
                     [
                         "git",
                         "push",
@@ -963,8 +963,8 @@ class GitBackend(VMNBackend):
         found_tag = self._be.tag(f"refs/tags/{tag}")
         try:
             return tuple(found_tag.commit.stats.files)
-        except Exception as exc:
-            VMN_LOGGER.debug(f"Logged exception: ", exc_info=True)
+        except Exception:
+            VMN_LOGGER.debug("Logged exception: ", exc_info=True)
             return None
 
     @measure_runtime_decorator
@@ -981,7 +981,7 @@ class GitBackend(VMNBackend):
         elif type == RELATIVE_TO_CURRENT_VCS_POSITION_TYPE:
             cmd_suffix = "HEAD"
         else:
-            cmd_suffix = f"--branches"
+            cmd_suffix = "--branches"
 
         shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
         if shallow:
@@ -1018,8 +1018,8 @@ class GitBackend(VMNBackend):
             bug_limit += 1
             if bug_limit == 100:
                 VMN_LOGGER.warning(
-                    f"Probable bug: vmn failed to find "
-                    f"vmn's commit after 100 interations."
+                    "Probable bug: vmn failed to find "
+                    "vmn's commit after 100 interations."
                 )
                 ver_infos = {}
                 break
@@ -1085,7 +1085,7 @@ class GitBackend(VMNBackend):
 
         try:
             found_tag = self._be.tag(f"refs/tags/{latest_tag}")
-        except Exception as exc:
+        except Exception:
             VMN_LOGGER.error(f"Failed to get tag object from tag name: {latest_tag}")
             return [], cobj, ver_infos
 
@@ -1111,7 +1111,7 @@ class GitBackend(VMNBackend):
     def _get_top_vmn_commit(self, app_name, cmd_suffix, msg_filter):
         cmd = [
             f"--grep={msg_filter}",
-            f"-1",
+            "-1",
             f"--author={VMN_USER_NAME}",
             "--pretty=%H,,,%D",
             "--decorate=short",
@@ -1172,21 +1172,20 @@ class GitBackend(VMNBackend):
     def get_tag_object_from_tag_name(self, tname):
         try:
             o = self._be.tag(f"refs/tags/{tname}")
-        except Exception as exc:
-            VMN_LOGGER.debug(f"Logged exception: ", exc_info=True)
+        except Exception:
+            VMN_LOGGER.debug("Logged exception: ", exc_info=True)
             # Backward compatability code for vmn 0.3.9:
             try:
                 _tag_name = f"{tname}.0"
                 o = self._be.tag(f"refs/tags/{tname}")
-                tag_name = _tag_name
-            except Exception as exc:
-                VMN_LOGGER.debug(f"Logged exception: ", exc_info=True)
+            except Exception:
+                VMN_LOGGER.debug("Logged exception: ", exc_info=True)
                 return tname, None
 
         try:
             if o.commit.author.name != "vmn":
                 return tname, None
-        except Exception as exc:
+        except Exception:
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
             return tname, None
 
@@ -1222,7 +1221,7 @@ class GitBackend(VMNBackend):
                     cleaned_tags = self.get_all_brother_tags(tagname)
                     cleaned_tags.pop(tagname)
                     cleaned_tags = cleaned_tags.keys()
-            except Exception as exc:
+            except Exception:
                 VMN_LOGGER.debug(f"Skipped on {hexsha} commit")
 
         for tname in cleaned_tags:
@@ -1268,7 +1267,7 @@ class GitBackend(VMNBackend):
         try:
             sha = self.changeset(tag=tag_name)
             ver_infos = self.get_all_commit_tags(sha)
-        except Exception as exc:
+        except Exception:
             VMN_LOGGER.debug(
                 f"Failed to get brother tags for tag: {tag_name}. "
                 f"Logged exception: ",
@@ -1349,7 +1348,7 @@ class GitBackend(VMNBackend):
                 branch_name = self.active_branch
 
             self.checkout(branch=branch_name)
-        except Exception as exc:
+        except Exception:
             logging.error("Failed to get branch name")
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
@@ -1372,7 +1371,7 @@ class GitBackend(VMNBackend):
 
             try:
                 assert ret.startswith(self.selected_remote.name)
-            except Exception as exc:
+            except Exception:
                 VMN_LOGGER.warning(
                     f"Found remote branch {ret} however it belongs to a "
                     f"different remote that vmn has selected to work with. "
@@ -1383,7 +1382,7 @@ class GitBackend(VMNBackend):
                 return None
 
             return ret
-        except Exception as exc:
+        except Exception:
             return None
 
     @measure_runtime_decorator
@@ -1415,7 +1414,7 @@ class GitBackend(VMNBackend):
                 ]
             )
             self._be.git.branch(f"--set-upstream-to={out}", local_branch_name)
-        except Exception as exc:
+        except Exception:
             VMN_LOGGER.debug(
                 f"Failed to set upstream branch for {local_branch_name}:", exc_info=True
             )
@@ -1571,8 +1570,8 @@ class GitBackend(VMNBackend):
                 return found_tag.commit.hexsha[:6]
 
             return found_tag.commit.hexsha
-        except Exception as exc:
-            VMN_LOGGER.debug(f"Logged exception: ", exc_info=True)
+        except Exception:
+            VMN_LOGGER.debug("Logged exception: ", exc_info=True)
             return None
 
     @measure_runtime_decorator
@@ -1582,13 +1581,13 @@ class GitBackend(VMNBackend):
                 try:
                     for f in files:
                         self._be.git.reset(f)
-                except Exception as exc:
+                except Exception:
                     VMN_LOGGER.debug(
                         f"Failed to git reset files: {files}", exc_info=True
                     )
 
                 self._be.index.checkout(files, force=True)
-            except Exception as exc:
+            except Exception:
                 VMN_LOGGER.debug(
                     f"Failed to git checkout files: {files}", exc_info=True
                 )
@@ -1610,7 +1609,7 @@ class GitBackend(VMNBackend):
         for tag in tags:
             try:
                 self._be.delete_tag(tag)
-            except Exception as exc:
+            except Exception:
                 VMN_LOGGER.info(f"Failed to remove tag {tag}")
                 VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
@@ -1693,13 +1692,13 @@ class GitBackend(VMNBackend):
     def get_commit_object_from_tag_name(self, tag_name):
         try:
             commit_tag_obj = self._be.commit(tag_name)
-        except Exception as exc:
+        except Exception:
             # Backward compatability code for vmn 0.3.9:
             try:
                 _tag_name = f"{tag_name}.0"
                 commit_tag_obj = self._be.commit(_tag_name)
                 tag_name = _tag_name
-            except Exception as exc:
+            except Exception:
                 return tag_name, None
 
         return tag_name, commit_tag_obj
