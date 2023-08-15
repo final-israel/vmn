@@ -3027,7 +3027,7 @@ def _vmn_run(args, root_path):
     return err, vmnc
 
 
-def validate_app_name(a rgs):
+def validate_app_name(args):
     if args.name.startswith("/"):
         stamp_utils.VMN_LOGGER.error("App name cannot start with /")
         raise RuntimeError()
