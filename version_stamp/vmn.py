@@ -499,12 +499,11 @@ class IVersionsStamper(object):
     def increase_octet(
         self,
         tag_name_prefix: str,
-        version_number_oct: str,
+        version_number_oct: int,
         release_mode: str,
         globally: bool,
     ) -> int:
         tag = self.backend.get_latest_available_tag(tag_name_prefix)
-        version_number_oct = int(version_number_oct)
         if tag and globally:
             props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
             version_number_oct = max(version_number_oct, int(props[release_mode]))
@@ -774,6 +773,8 @@ class IVersionsStamper(object):
     @staticmethod
     def parse_template(template: str) -> object:
         match = re.search(stamp_utils.VMN_TEMPLATE_REGEX, template)
+        if match is None:
+            raise RuntimeError(f"Failed to parse template {template}")
 
         gdict = match.groupdict()
 
@@ -3026,7 +3027,7 @@ def _vmn_run(args, root_path):
     return err, vmnc
 
 
-def validate_app_name(args):
+def validate_app_name(a rgs):
     if args.name.startswith("/"):
         stamp_utils.VMN_LOGGER.error("App name cannot start with /")
         raise RuntimeError()
