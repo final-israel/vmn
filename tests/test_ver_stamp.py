@@ -3757,6 +3757,67 @@ def test_orm_use_override_in_rc(app_layout, capfd):
     assert data["_version"] == f"1.0.1-rc.1"
     assert data["prerelease"] == "rc"
 
+
+def test_orm_use_override_rc_in_rc(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.1"
+    assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, override_version="1.0.1-rc.1", optional_release_mode="patch", prerelease="rc"
+    )
+
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"1.0.1-rc.2"
+    assert data["prerelease"] == "rc"
+
+
+def test_orm_use_override_rc_in_rc(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout("first_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.1"
+    assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, override_version="1.0.1-rc1.1", optional_release_mode="patch", prerelease="rc2"
+    )
+
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"1.0.1-rc2.1"
+    assert data["prerelease"] == "rc"
+
+
 def test_orm_use_override_in_stable(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
