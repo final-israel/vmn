@@ -3603,7 +3603,7 @@ def test_orm_rc_from_rc_globally_latest_release(app_layout, capfd):
 
         app_layout.checkout(main_branch)
 
-    err, ver_info, _ = _release_app(app_layout.app_name, "0.0.2-rc1.1")
+    err, ver_info, _ = _release_app(app_layout.app_name, "0.0.2-rc0.1")
 
     assert err == 0
     data = ver_info["stamping"]["app"]
@@ -3788,7 +3788,7 @@ def test_orm_use_override_rc_in_rc(app_layout, capfd):
     assert data["prerelease"] == "rc"
 
 
-def test_orm_use_override_rc_in_rc(app_layout, capfd):
+def test_orm_use_override_diff_rc_in_rc(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(app_layout.app_name, "patch")
