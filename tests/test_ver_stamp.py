@@ -3815,7 +3815,7 @@ def test_orm_use_override_diff_rc_in_rc(app_layout, capfd):
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"1.0.1-rc2.1"
-    assert data["prerelease"] == "rc"
+    assert data["prerelease"] == "rc2"
 
 
 def test_orm_use_override_in_stable(app_layout, capfd):
