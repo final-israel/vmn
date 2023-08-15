@@ -3488,7 +3488,7 @@ def test_jenkins_checkout(app_layout, capfd):
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
 
-def test_rc_from_release(app_layout, capfd):
+def test_orm_rc_from_release(app_layout, capfd):
     #Prepare
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -3509,7 +3509,7 @@ def test_rc_from_release(app_layout, capfd):
     assert data["prerelease"] == "rc"
 
 
-def test_rc_from_stable_latest_other_rc(app_layout, capfd):
+def test_orm_rc_from_release_globally_latest_other_rc(app_layout, capfd):
     #Prepare
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -3541,7 +3541,7 @@ def test_rc_from_stable_latest_other_rc(app_layout, capfd):
     assert data["_version"] == f"0.0.2-rc2.1"
     assert data["prerelease"] == "rc2"
 
-def test_rc_from_stable_latest_same_rc(app_layout, capfd):
+def test_orm_rc_from_release_globally_latest_same_rc(app_layout, capfd):
     #Prepare
     _run_vmn_init()
     _init_app(app_layout.app_name)
