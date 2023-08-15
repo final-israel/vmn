@@ -1507,9 +1507,8 @@ def handle_stamp(vmn_ctx):
     if vmn_ctx.vcs.release_mode == "micro":
         vmn_ctx.vcs.release_mode = "hotfix"
 
-    if vmn_ctx.vcs.prerelease and vmn_ctx.vcs.prerelease[-1] == '.':
+    if vmn_ctx.vcs.prerelease and vmn_ctx.vcs.prerelease[-1] == ".":
         vmn_ctx.vcs.prerelease = vmn_ctx.vcs.prerelease[:-1]
-
 
     assert vmn_ctx.vcs.release_mode is None or vmn_ctx.vcs.optional_release_mode is None
 
@@ -1589,13 +1588,14 @@ def handle_stamp(vmn_ctx):
                 verstr, hide_zero_hotfix=vmn_ctx.vcs.hide_zero_hotfix
             )
         except stamp_utils.WrongTagFormatException as e:
-            stamp_utils.VMN_LOGGER.debug(f"Logged Exception message: {e}", exc_info=True)
+            stamp_utils.VMN_LOGGER.debug(
+                f"Logged Exception message: {e}", exc_info=True
+            )
 
             return 1
 
         release_tag_name = stamp_utils.VMNBackend.serialize_vmn_tag_name(
-            vmn_ctx.vcs.name,
-            base_verstr
+            vmn_ctx.vcs.name, base_verstr
         )
 
         tag_name_prefix = f"{release_tag_name}*"
