@@ -3529,7 +3529,7 @@ def test_rc_from_stable_latest_other_rc(app_layout, capfd):
     assert data["prerelease"] == "rc1"
 
     # Actual Test
-    app_layout.checkout(main_branch, create_new=True)
+    app_layout.checkout(main_branch)
     app_layout.checkout("second_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
     
@@ -3561,7 +3561,7 @@ def test_rc_from_stable_latest_same_rc(app_layout, capfd):
     assert data["prerelease"] == "rc"
 
     # Actual Test
-    app_layout.checkout(main_branch, create_new=True)
+    app_layout.checkout(main_branch)
     app_layout.checkout("second_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
     
