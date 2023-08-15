@@ -3575,7 +3575,7 @@ def test_orm_rc_from_release_globally_latest_same_rc(app_layout, capfd):
     assert data["prerelease"] == "rc"
 
 
-def test_rc_from_rc_latest_stable(app_layout, capfd):
+def test_orm_rc_from_rc_globally_latest_release(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(app_layout.app_name, "patch")
@@ -3620,7 +3620,7 @@ def test_rc_from_rc_latest_stable(app_layout, capfd):
 
 
 
-def test_rc_from_rc_latest_other_rc(app_layout, capfd):
+def test_orm_rc_from_rc_globally_latest_other_rc(app_layout, capfd):
     #Prepare
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -3651,7 +3651,7 @@ def test_rc_from_rc_latest_other_rc(app_layout, capfd):
     assert data["_version"] == f"0.0.2-rc2.1"
     assert data["prerelease"] == "rc2"
 
-def test_rc_from_rc_latest_same_rc(app_layout, capfd):
+def test_orm_rc_from_rc_globally_latest_same_rc(app_layout, capfd):
     #Prepare
     _run_vmn_init()
     _init_app(app_layout.app_name)
