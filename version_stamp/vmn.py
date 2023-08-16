@@ -2901,8 +2901,8 @@ def vmn_run(command_line=None):
     try:
         stamp_utils.init_stamp_logger()
         args = parse_user_commands(command_line)
-    except Exception:
-        stamp_utils.VMN_LOGGER.debug("Logged exception: ", exc_info=True)
+    except Exception as exc:
+        stamp_utils.VMN_LOGGER.error("Logged exception: ", exc_info=True)
         return 1, None
 
     try:
@@ -3286,7 +3286,7 @@ def verify_user_input_version(args, key):
 
         raise RuntimeError(err)
 
-    if props["buildmetada"] is not None:
+    if props["buildmetadata"] is not None:
         err = f"Option: {key} must not include buildmetadata parts"
         stamp_utils.VMN_LOGGER.error(err)
         raise RuntimeError(err)
