@@ -3160,7 +3160,7 @@ def add_arg_stamp(subprasers):
         "--override-version",
         default=None,
         help=f"Override current version with any version in the "
-        f"format: {stamp_utils.VMN_BASE_VER_REGEX}",
+        f"format: {stamp_utils.VMN_VERSTR_REGEX}",
     )
     pstamp.add_argument("--dry-run", dest="dry", action="store_true")
     pstamp.set_defaults(dry=False)
@@ -3275,7 +3275,7 @@ def verify_user_input_version(args, key):
         return
 
     try:
-        stamp_utils.VMNBackend.deserialize_vmn_version(getattr(args, key))
+        props = stamp_utils.VMNBackend.deserialize_vmn_version(getattr(args, key))
     except Exception:
         if "root" not in args or not args.root:
             err = f"Version must be in format: {stamp_utils.VMN_VERSION_FORMAT}"
@@ -3284,6 +3284,11 @@ def verify_user_input_version(args, key):
 
         stamp_utils.VMN_LOGGER.error(err)
 
+        raise RuntimeError(err)
+
+    if props["buildmetada"] is not None:
+        err = f"Option: {key} must not include buildmetadata parts"
+        stamp_utils.VMN_LOGGER.error(err)
         raise RuntimeError(err)
 
 
