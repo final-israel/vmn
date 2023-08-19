@@ -3937,3 +3937,54 @@ def test_problem_found_in_real_customer(app_layout, capfd):
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"2.3.2-189.1"
     assert data["prerelease"] == "189"
+
+def test_a1(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name, "2.4.2")
+
+    err, ver_info, params = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="189."
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"2.4.3-189.1"
+    assert data["prerelease"] == "189"
+    
+    # change manually last_known version 2.5.0-189.1
+    file_path = params["version_file_path"]
+
+    app_layout.remove_file(file_path)
+    verfile_manual_content = {
+        "version_to_stamp_from": "2.5.0-189.1",
+    }
+    # now we want to override the version by changing the file version:
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        ".vmn/test_app/{}".format(vmn.VER_FILE_NAME),
+        yaml.dump(verfile_manual_content),
+    )
+    capfd.readouterr()
+    # show - fails
+    err = _show(app_layout.app_name, verbose=True)
+    captured = capfd.readouterr()
+    assert err == 1
+    # stamp pr and ov 2.5.0-189.2
+    err, ver_info, params = _stamp_app(
+        app_layout.app_name, prerelease="189", override_version="2.5.0-189.1"
+    )
+
+    err = _show(app_layout.app_name, verbose=True)
+    assert err == 0
+    
+
+    # Should work
+    # init 2.4.2
+    # stamp orm patch 2.4.3-189.1
+    # stamp pr and ov 2.5.0-189.2
+
+    # Should work
+    # init 2.4.2
+    # stamp orm patch 2.4.3-189.1
+    # change manually last_known version 2.5.0-189.1
+    # show - fails
+    # stamp pr 2.5.0-189.2
