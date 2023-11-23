@@ -282,13 +282,16 @@ class FSAppLayoutFixture(object):
 
         return True
 
-    def remove_tag(self, tag_name):
+    def remove_tag(self, tag_name, remote=True):
         import subprocess
 
         base_cmd = ["git", "tag", "-d", tag_name]
 
         LOGGER.info(f"going to run: {' '.join(base_cmd)}")
         subprocess.call(base_cmd, cwd=self.repo_path)
+
+        if not remote:
+            return
 
         base_cmd = [
             "git",

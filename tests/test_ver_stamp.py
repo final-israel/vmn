@@ -4128,3 +4128,52 @@ def test_problem_found_in_real_customer(app_layout, capfd):
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "2.3.2-189.1"
     assert data["prerelease"] == "189"
+
+
+def test_stamp_orm_two_prs(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    for i in range(4):
+        app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+        err, ver_info, _ = _stamp_app(
+            app_layout.app_name,
+            optional_release_mode="patch",
+            prerelease="rc"
+        )
+        assert err == 0
+        data = ver_info["stamping"]["app"]
+        assert data["_version"] == f"0.0.2-rc.{i + 1}"
+        assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name,
+        optional_release_mode="patch",
+        prerelease="rc1"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc1.1"
+    assert data["prerelease"] == "rc1"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    # tags_before = app_layout.get_all_tags()
+
+    app_layout.remove_tag('test_app_0.0.2-rc.4', remote=False)
+    app_layout.remove_tag('test_app_0.0.2-rc1.1', remote=False)
+
+    capfd.readouterr()
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name,
+        optional_release_mode="patch",
+        prerelease="rc"
+    )
+    captured = capfd.readouterr()
+
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.5"
+    assert data["prerelease"] == "rc"
